@@ -11,12 +11,13 @@
   "default"
   "try"
   "catch"
-  "break"
-  "continue"
   "goto"
   "end"
-  "throw"
 ] @keyword
+
+; Break and continue statements
+(break_statement) @keyword
+(continue_statement) @keyword
 
 ; Scope keywords (local, level, game, etc.)
 (scope_keyword) @keyword.storage
@@ -89,7 +90,6 @@
 
 [
   "."
-  ","
   ";"
 ] @punctuation.delimiter
 

@@ -26,8 +26,14 @@ module.exports = grammar({
   word: $ => $.identifier,
 
   conflicts: $ => [
-    [$.call_expression, $.binary_expression],
-    [$.primary_expression, $.assignment_expression],
+    [$.primary_expression, $.call_expression],
+    [$.ternary_expression, $.argument_list],
+    [$.argument_list, $.const_array],
+    [$.parameter_list, $.primary_expression],
+    [$.labeled_statement, $.block],
+    [$.call_expression],
+    [$.ternary_expression, $.const_array],
+    [$.const_array],
   ],
 
   rules: {
@@ -48,7 +54,6 @@ module.exports = grammar({
       $.break_statement,
       $.continue_statement,
       $.goto_statement,
-      $.end_statement,
       $.expression_statement,
       $.empty_statement,
     ),
@@ -63,24 +68,24 @@ module.exports = grammar({
 
     parameter_list: $ => repeat1($.scoped_variable),
 
-    // Labeled statement for goto targets
-    labeled_statement: $ => seq(
+    // Labeled statement for goto targets - use prec.right to consume optional statement
+    labeled_statement: $ => prec.right(seq(
       field('label', $.identifier),
       ':',
       optional($._statement),
-    ),
+    )),
 
     // Block of statements (implicit via end or next thread)
-    block: $ => repeat1($._statement),
+    block: $ => prec.left(repeat1($._statement)),
 
     // Empty statement
     empty_statement: $ => ';',
 
-    // Expression statement
-    expression_statement: $ => seq(
+    // Expression statement - use prec.right to greedily consume optional semicolon
+    expression_statement: $ => prec.right(seq(
       $._expression,
       optional(';'),
-    ),
+    )),
 
     // if/else statement
     if_statement: $ => prec.right(seq(
@@ -133,7 +138,6 @@ module.exports = grammar({
       field('value', $._expression),
       ':',
       repeat($._statement),
-      optional('break'),
     ),
 
     default_case: $ => seq(
@@ -150,11 +154,11 @@ module.exports = grammar({
       field('handler', $.block_or_statement),
     ),
 
-    // return/end
-    return_statement: $ => seq(
+    // return/end - use prec.right to greedily consume optional return value
+    return_statement: $ => prec.right(seq(
       'end',
       optional(field('value', $._expression)),
-    ),
+    )),
 
     break_statement: $ => 'break',
     continue_statement: $ => 'continue',
@@ -163,8 +167,6 @@ module.exports = grammar({
       'goto',
       field('label', $.identifier),
     ),
-
-    end_statement: $ => 'end',
 
     // ==================== EXPRESSIONS ====================
 
@@ -242,7 +244,7 @@ module.exports = grammar({
       optional(field('arguments', $.argument_list)),
     )),
 
-    argument_list: $ => repeat1($._expression),
+    argument_list: $ => prec.left(repeat1($._expression)),
 
     // Member access: entity.property
     member_expression: $ => prec.left(10, seq(

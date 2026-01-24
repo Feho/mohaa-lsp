@@ -15,6 +15,13 @@ export class DefinitionProvider {
   constructor(private documentManager: DocumentManager) {}
 
   /**
+   * Escape special regex characters in a string
+   */
+  private escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  /**
    * Provide go-to-definition for the symbol at position
    */
   provideDefinition(document: TextDocument, position: Position): Definition | null {
@@ -25,7 +32,7 @@ export class DefinitionProvider {
     const wordInfo = this.getWordAtPosition(text, offset);
     if (!wordInfo) return null;
 
-    const { word, start, end } = wordInfo;
+    const { word } = wordInfo;
 
     // Check for cross-file reference: exec path.scr::label
     const crossFileMatch = this.getCrossFileReference(text, offset);
@@ -36,7 +43,7 @@ export class DefinitionProvider {
     // Check for thread call pattern: thread threadname or waitthread threadname
     const threadCallMatch = text.substring(0, offset).match(/(thread|waitthread|exec)\s+$/i);
     if (threadCallMatch) {
-      return this.findThreadDefinition(word, document.uri);
+      return this.findThreadDefinition(word);
     }
 
     // Check for goto target
@@ -167,7 +174,7 @@ export class DefinitionProvider {
       if (doc.uri.toLowerCase().endsWith(ref.file.toLowerCase())) {
         // Find the label in this document
         const text = doc.getText();
-        const labelRegex = new RegExp(`^${ref.label}\\s*:`, 'm');
+        const labelRegex = new RegExp(`^${this.escapeRegex(ref.label)}\\s*:`, 'm');
         const match = labelRegex.exec(text);
 
         if (match) {
@@ -186,7 +193,7 @@ export class DefinitionProvider {
   /**
    * Find thread definition in current or other files
    */
-  private findThreadDefinition(threadName: string, currentUri: string): Definition | null {
+  private findThreadDefinition(threadName: string): Definition | null {
     const threadDef = this.documentManager.findThread(threadName);
 
     if (threadDef) {
@@ -204,7 +211,7 @@ export class DefinitionProvider {
    */
   private findLabelDefinition(labelName: string, document: TextDocument): Definition | null {
     const text = document.getText();
-    const labelRegex = new RegExp(`^(${labelName})\\s*:`, 'm');
+    const labelRegex = new RegExp(`^(${this.escapeRegex(labelName)})\\s*:`, 'm');
     const match = labelRegex.exec(text);
 
     if (match) {

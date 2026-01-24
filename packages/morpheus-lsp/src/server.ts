@@ -222,11 +222,17 @@ async function validateDocument(document: TextDocument): Promise<void> {
     for (let j = 0; j < stringMatches.length; j++) {
       const match = stringMatches[j];
       const quoteChar = match[0];
+      const charIndex = match.index || 0;
+
+      // Skip escaped quotes (preceded by backslash)
+      if (charIndex > 0 && lineWithoutComments[charIndex - 1] === '\\') {
+        continue;
+      }
 
       if (!inString) {
         inString = true;
         stringChar = quoteChar;
-        stringStartChar = match.index || 0;
+        stringStartChar = charIndex;
       } else if (quoteChar === stringChar) {
         inString = false;
       }
@@ -245,8 +251,8 @@ async function validateDocument(document: TextDocument): Promise<void> {
     }
     diagnostics.push(...stringErrors);
 
-    // Remove strings from line for bracket checking
-    const lineForBracketCheck = lineWithoutComments.replace(/["'][^"']*["']/g, '""');
+    // Remove strings from line for bracket checking (handles escaped quotes)
+    const lineForBracketCheck = lineWithoutComments.replace(/(["'])(?:[^"'\\]|\\.)*\1/g, '""');
 
     // Check for thread definition (use comment-stripped line)
     // Thread definitions must start at column 0 (no indentation) - this prevents false positives

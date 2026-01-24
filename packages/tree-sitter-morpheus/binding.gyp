@@ -3,7 +3,7 @@
     {
       "target_name": "tree_sitter_morpheus_binding",
       "include_dirs": [
-        "<!(node -e \"require('node-addon-api').include\")",
+        "<!(node -p \"require('node-addon-api').include_dir\")",
         "src"
       ],
       "sources": [
@@ -15,7 +15,8 @@
         "-std=c11"
       ],
       "defines": [
-        "NAPI_VERSION=7"
+        "NAPI_VERSION=7",
+        "NAPI_DISABLE_CPP_EXCEPTIONS"
       ]
     }
   ]
