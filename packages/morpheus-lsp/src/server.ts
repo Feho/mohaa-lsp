@@ -249,30 +249,36 @@ async function validateDocument(document: TextDocument): Promise<void> {
     const lineForBracketCheck = lineWithoutComments.replace(/["'][^"']*["']/g, '""');
 
     // Check for thread definition (use comment-stripped line)
+    // Thread definitions must start at column 0 (no indentation) - this prevents false positives
+    // for identifiers inside thread bodies (like array elements in makeArray)
     const codeOnly = lineWithoutComments.trimStart();
-    const threadPattern = /^(\w[\w@#'-]*)\s*((?:(?:local|group)\.\w+\s*)*)(?::|\s*$)/;
-    const threadMatch = threadPattern.exec(codeOnly);
-    if (threadMatch) {
-      const name = threadMatch[1];
-      const hasColon = codeOnly.includes(':');
+    const isAtColumnZero = rawLine.length > 0 && rawLine[0] !== ' ' && rawLine[0] !== '\t';
 
-      // Skip reserved keywords - they are not thread definitions
-      if (!reservedKeywords.has(name) && /^\w[\w@#'-]*\s*((?:(?:local|group)\.\w+\s*)*)/.test(codeOnly)) {
-        if (!hasColon && !inThread) {
-          const errorIndex = rawLine.length;
-          diagnostics.push({
-            severity: DiagnosticSeverity.Error,
-            range: {
-              start: { line: i, character: errorIndex },
-              end: { line: i, character: errorIndex },
-            },
-            message: `Expected ':' after thread definition '${name}'`,
-            source: 'morpheus-lsp',
-          });
-        } else if (hasColon) {
-          inThread = true;
-          threadStartLine = i;
-          threadName = name;
+    if (isAtColumnZero) {
+      const threadPattern = /^(\w[\w@#'-]*)\s*((?:(?:local|group)\.\w+\s*)*)(?::|\s*$)/;
+      const threadMatch = threadPattern.exec(codeOnly);
+      if (threadMatch) {
+        const name = threadMatch[1];
+        const hasColon = codeOnly.includes(':');
+
+        // Skip reserved keywords - they are not thread definitions
+        if (!reservedKeywords.has(name)) {
+          if (!hasColon && !inThread) {
+            const errorIndex = rawLine.length;
+            diagnostics.push({
+              severity: DiagnosticSeverity.Error,
+              range: {
+                start: { line: i, character: errorIndex },
+                end: { line: i, character: errorIndex },
+              },
+              message: `Expected ':' after thread definition '${name}'`,
+              source: 'morpheus-lsp',
+            });
+          } else if (hasColon) {
+            inThread = true;
+            threadStartLine = i;
+            threadName = name;
+          }
         }
       }
     }
