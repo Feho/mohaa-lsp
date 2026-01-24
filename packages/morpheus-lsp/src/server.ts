@@ -151,24 +151,72 @@ async function validateDocument(document: TextDocument): Promise<void> {
   // Track bracket/brace/paren balance per line
   const bracketStack: Array<{ char: string; line: number; column: number }> = [];
 
+  // Track multiline comment state
+  let inMultilineComment = false;
+
+  // Reserved keywords that should not be treated as thread definitions
+  const reservedKeywords = new Set([
+    'end', 'break', 'continue', 'else', 'if', 'while', 'for', 'switch', 'case', 'default',
+    'local', 'group', 'level', 'game', 'self', 'thread', 'wait', 'waitframe', 'waitthread',
+    'NIL', 'NULL', 'true', 'false', 'size', 'try', 'catch', 'throw', 'goto', 'return',
+  ]);
+
   for (let i = 0; i < lines.length; i++) {
     const rawLine = lines[i];
     const line = rawLine.trimStart();
 
-    // Skip comment lines
-    if (line.startsWith('//')) {
+    // First, strip comments from the line (preserving character positions with spaces)
+    // This must happen before string checking to avoid false positives from quotes in comments
+    let lineWithoutComments = '';
+    let idx = 0;
+    while (idx < rawLine.length) {
+      if (inMultilineComment) {
+        // Look for end of multiline comment
+        const endIdx = rawLine.indexOf('*/', idx);
+        if (endIdx !== -1) {
+          // Replace comment content (including */) with spaces
+          lineWithoutComments += ' '.repeat(endIdx - idx + 2);
+          inMultilineComment = false;
+          idx = endIdx + 2;
+        } else {
+          // Rest of line is inside comment - replace with spaces
+          lineWithoutComments += ' '.repeat(rawLine.length - idx);
+          break;
+        }
+      } else {
+        // Look for start of multiline comment or single-line comment
+        const startMulti = rawLine.indexOf('/*', idx);
+        const startSingle = rawLine.indexOf('//', idx);
+
+        if (startSingle !== -1 && (startMulti === -1 || startSingle < startMulti)) {
+          // Single-line comment starts first - rest of line is comment
+          lineWithoutComments += rawLine.substring(idx, startSingle);
+          lineWithoutComments += ' '.repeat(rawLine.length - startSingle);
+          break;
+        } else if (startMulti !== -1) {
+          // Multiline comment starts
+          lineWithoutComments += rawLine.substring(idx, startMulti);
+          lineWithoutComments += '  '; // Replace /* with spaces
+          inMultilineComment = true;
+          idx = startMulti + 2;
+        } else {
+          // No more comments on this line
+          lineWithoutComments += rawLine.substring(idx);
+          break;
+        }
+      }
+    }
+
+    // Skip lines that are entirely comments or whitespace
+    if (lineWithoutComments.trim() === '') {
       continue;
     }
 
-    // Remove string literals to avoid checking their contents
-    let lineWithoutStrings = rawLine;
+    // Check for unclosed strings (on comment-stripped line)
     let stringErrors: Diagnostic[] = [];
-
-    // Check for unclosed strings
-    const stringMatches = [...rawLine.matchAll(/["']/g)];
+    const stringMatches = [...lineWithoutComments.matchAll(/["']/g)];
     let inString = false;
     let stringChar = '';
-    let stringStartLine = i;
     let stringStartChar = 0;
 
     for (let j = 0; j < stringMatches.length; j++) {
@@ -178,7 +226,6 @@ async function validateDocument(document: TextDocument): Promise<void> {
       if (!inString) {
         inString = true;
         stringChar = quoteChar;
-        stringStartLine = i;
         stringStartChar = match.index || 0;
       } else if (quoteChar === stringChar) {
         inString = false;
@@ -199,16 +246,18 @@ async function validateDocument(document: TextDocument): Promise<void> {
     diagnostics.push(...stringErrors);
 
     // Remove strings from line for bracket checking
-    lineWithoutStrings = rawLine.replace(/["'][^"']*["']/g, '""');
+    const lineForBracketCheck = lineWithoutComments.replace(/["'][^"']*["']/g, '""');
 
-    // Check for thread definition
+    // Check for thread definition (use comment-stripped line)
+    const codeOnly = lineWithoutComments.trimStart();
     const threadPattern = /^(\w[\w@#'-]*)\s*((?:(?:local|group)\.\w+\s*)*)(?::|\s*$)/;
-    const threadMatch = threadPattern.exec(line);
-    if (threadMatch && !line.match(/^\s*\/\//)) {
+    const threadMatch = threadPattern.exec(codeOnly);
+    if (threadMatch) {
       const name = threadMatch[1];
-      const hasColon = line.includes(':');
+      const hasColon = codeOnly.includes(':');
 
-      if (/^\w[\w@#'-]*\s*((?:(?:local|group)\.\w+\s*)*)/.test(line)) {
+      // Skip reserved keywords - they are not thread definitions
+      if (!reservedKeywords.has(name) && /^\w[\w@#'-]*\s*((?:(?:local|group)\.\w+\s*)*)/.test(codeOnly)) {
         if (!hasColon && !inThread) {
           const errorIndex = rawLine.length;
           diagnostics.push({
@@ -228,14 +277,14 @@ async function validateDocument(document: TextDocument): Promise<void> {
       }
     }
 
-    // Check for end statement
-    if (/^\s*end\s*$/.test(line) || /^\s*end\s+/.test(line)) {
+    // Check for end statement (use comment-stripped line)
+    if (/^\s*end\s*$/.test(codeOnly) || /^\s*end\s+/.test(codeOnly)) {
       inThread = false;
     }
 
     // Check brackets/braces/parens balance
-    for (let j = 0; j < lineWithoutStrings.length; j++) {
-      const char = lineWithoutStrings[j];
+    for (let j = 0; j < lineForBracketCheck.length; j++) {
+      const char = lineForBracketCheck[j];
 
       if (char === '(' || char === '[' || char === '{') {
         bracketStack.push({ char, line: i, column: j });
@@ -270,24 +319,25 @@ async function validateDocument(document: TextDocument): Promise<void> {
       }
     }
 
-    // Check for common operator mistakes
-    const assignmentMatch = line.match(/\b\w+\s*==\s*\w+/);
-    if (assignmentMatch && !line.match(/if|while|for/) && !line.match(/\/\//)) {
+    // Check for common operator mistakes (use lineWithoutComments to avoid false positives in comments)
+    const assignmentMatch = lineWithoutComments.match(/\b\w+\s*==\s*\w+/);
+    if (assignmentMatch && !lineWithoutComments.match(/if|while|for/)) {
+      const eqIdx = lineWithoutComments.indexOf('==');
       diagnostics.push({
         severity: DiagnosticSeverity.Warning,
         range: {
-          start: { line: i, character: rawLine.indexOf('==') },
-          end: { line: i, character: rawLine.indexOf('==') + 2 },
+          start: { line: i, character: eqIdx },
+          end: { line: i, character: eqIdx + 2 },
         },
         message: `Using '==' for assignment. Did you mean '='?`,
         source: 'morpheus-lsp',
       });
     }
 
-    // Check for deprecated functions
-    const deprecatedMatch = line.match(/\b(dprintln)\b/gi);
+    // Check for deprecated functions (use lineWithoutComments to avoid false positives in comments)
+    const deprecatedMatch = lineWithoutComments.match(/\b(dprintln)\b/gi);
     if (deprecatedMatch) {
-      const index = rawLine.indexOf(deprecatedMatch[0]);
+      const index = lineWithoutComments.indexOf(deprecatedMatch[0]);
       diagnostics.push({
         severity: DiagnosticSeverity.Hint,
         range: {
