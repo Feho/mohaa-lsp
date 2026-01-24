@@ -1,0 +1,300 @@
+================================================================================
+Thread definition
+================================================================================
+
+mythread:
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (end_statement))))
+
+================================================================================
+Thread with parameters
+================================================================================
+
+mythread local.param1 local.param2:
+  println local.param1
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (scoped_variable
+        scope: (scope_keyword)
+        name: (identifier))
+      (scoped_variable
+        scope: (scope_keyword)
+        name: (identifier)))
+    body: (block
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier)))))
+      (end_statement))))
+
+================================================================================
+Variable assignment
+================================================================================
+
+main:
+  local.x = 5
+  local.y = "hello"
+  level.count = 0
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          operator: (MISSING "=")
+          right: (primary_expression
+            (number))))
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          operator: (MISSING "=")
+          right: (primary_expression
+            (string))))
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          operator: (MISSING "=")
+          right: (primary_expression
+            (number))))
+      (end_statement))))
+
+================================================================================
+If statement
+================================================================================
+
+main:
+  if (local.x == 5)
+  {
+    println "five"
+  }
+  else
+  {
+    println "not five"
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (if_statement
+        condition: (parenthesized_expression
+          (binary_expression
+            (primary_expression
+              (scoped_variable
+                scope: (scope_keyword)
+                name: (identifier)))
+            (primary_expression
+              (number))))
+        consequence: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (primary_expression
+                  (string))))))
+        alternative: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (primary_expression
+                  (string)))))))
+      (end_statement))))
+
+================================================================================
+Entity reference
+================================================================================
+
+main:
+  $player kill
+  $("dynamic_name") remove
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (expression_statement
+        (call_expression
+          target: (entity_reference
+            (identifier))
+          function: (identifier)))
+      (expression_statement
+        (call_expression
+          target: (entity_reference
+            (primary_expression
+              (string)))
+          function: (identifier)))
+      (end_statement))))
+
+================================================================================
+Const array
+================================================================================
+
+main:
+  local.arr = 1 :: 2 :: 3 :: "four"
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          operator: (MISSING "=")
+          right: (const_array
+            (primary_expression
+              (number))
+            (primary_expression
+              (number))
+            (primary_expression
+              (number))
+            (primary_expression
+              (string)))))
+      (end_statement))))
+
+================================================================================
+For loop
+================================================================================
+
+main:
+  for (local.i = 0; local.i < 10; local.i = local.i + 1)
+  {
+    println local.i
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (for_statement
+        init: (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (primary_expression
+            (number)))
+        condition: (binary_expression
+          (primary_expression
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier)))
+          (primary_expression
+            (number)))
+        update: (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (primary_expression
+              (scoped_variable
+                scope: (scope_keyword)
+                name: (identifier)))
+            (primary_expression
+              (number))))
+        body: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))))
+      (end_statement))))
+
+================================================================================
+Switch statement
+================================================================================
+
+main:
+  switch (local.x)
+  {
+    case 1:
+      println "one"
+      break
+    case 2:
+      println "two"
+      break
+    default:
+      println "other"
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (block
+      (switch_statement
+        value: (parenthesized_expression
+          (primary_expression
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier))))
+        (switch_case
+          value: (primary_expression
+            (number))
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (primary_expression
+                  (string))))))
+        (switch_case
+          value: (primary_expression
+            (number))
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (primary_expression
+                  (string))))))
+        (default_case
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (primary_expression
+                  (string)))))))
+      (end_statement))))

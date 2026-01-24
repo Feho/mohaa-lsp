@@ -1,0 +1,53 @@
+{
+  "name": "tree-sitter-morpheus",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for MOHAA Morpheus Script (.scr)",
+  "main": "bindings/node",
+  "types": "bindings/node/index.d.ts",
+  "keywords": [
+    "tree-sitter",
+    "parser",
+    "morpheus",
+    "mohaa",
+    "scr"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**"
+  ],
+  "scripts": {
+    "build": "tree-sitter generate && node-gyp build",
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "parse": "tree-sitter parse"
+  },
+  "dependencies": {
+    "node-addon-api": "^7.0.0",
+    "node-gyp-build": "^4.6.1"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.22.1"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "tree-sitter": {
+      "optional": true
+    }
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.scr",
+      "file-types": [
+        "scr"
+      ],
+      "highlights": "queries/highlights.scm",
+      "injection-regex": "^(scr|morpheus)$"
+    }
+  ]
+}

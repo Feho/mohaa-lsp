@@ -1,0 +1,95 @@
+{
+  "name": "vscode-morpheus",
+  "displayName": "Morpheus Script",
+  "description": "Language support for MOHAA Morpheus Script (.scr)",
+  "version": "0.1.0",
+  "publisher": "mohaa-community",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "mohaa",
+    "morpheus",
+    "scr",
+    "medal of honor"
+  ],
+  "activationEvents": [
+    "onLanguage:morpheus"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "morpheus",
+        "aliases": [
+          "Morpheus Script",
+          "morpheus",
+          "scr"
+        ],
+        "extensions": [
+          ".scr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "morpheus",
+        "scopeName": "source.morpheus",
+        "path": "./syntaxes/morpheus.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Morpheus Script",
+      "properties": {
+        "morpheus.gameVersion": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "AA",
+              "SH",
+              "BT",
+              "Reborn",
+              "NightFall"
+            ]
+          },
+          "default": [
+            "AA",
+            "SH",
+            "BT"
+          ],
+          "description": "Game versions to enable completions for"
+        },
+        "morpheus.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run build -- --watch",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.19.10",
+    "typescript": "^5.3.3"
+  }
+}

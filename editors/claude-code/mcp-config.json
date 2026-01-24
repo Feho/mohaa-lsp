@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/anthropics/claude-code/main/schemas/mcp-config.schema.json",
+  "mcpServers": {
+    "morpheus-lsp": {
+      "command": "npx",
+      "args": ["morpheus-lsp", "--stdio"],
+      "description": "Morpheus Script language server for MOHAA .scr files"
+    }
+  }
+}
