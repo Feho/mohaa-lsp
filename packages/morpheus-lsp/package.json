@@ -7,7 +7,7 @@
     "morpheus-lsp": "./dist/server.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp -r src/data dist/",
     "watch": "tsc -w",
     "clean": "rm -rf dist",
     "lint": "eslint src --ext .ts",
