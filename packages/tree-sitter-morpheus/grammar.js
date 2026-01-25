@@ -251,28 +251,32 @@ module.exports = grammar({
       field('right', $._expression),
     )),
 
-    // Binary expressions with precedence
+    // Binary expressions with precedence (C-style: higher number = higher precedence)
+    // See: https://en.cppreference.com/w/c/language/operator_precedence
     binary_expression: $ => choice(
-      prec.left(2, seq($._expression, '||', $._expression)),
-      prec.left(3, seq($._expression, '&&', $._expression)),
-      prec.left(4, seq($._expression, choice('==', '!=', '<', '>', '<=', '>='), $._expression)),
-      prec.left(5, seq($._expression, choice('+', '-'), $._expression)),
-      prec.left(6, seq($._expression, choice('*', '/', '%'), $._expression)),
-      prec.left(7, seq($._expression, choice('&', '|', '^'), $._expression)),
+      prec.left(2, seq($._expression, '||', $._expression)),                                      // Logical OR: lowest
+      prec.left(3, seq($._expression, '&&', $._expression)),                                      // Logical AND
+      prec.left(4, seq($._expression, '|', $._expression)),                                       // Bitwise OR
+      prec.left(5, seq($._expression, '^', $._expression)),                                       // Bitwise XOR
+      prec.left(6, seq($._expression, '&', $._expression)),                                       // Bitwise AND
+      prec.left(7, seq($._expression, choice('==', '!='), $._expression)),                        // Equality
+      prec.left(8, seq($._expression, choice('<', '>', '<=', '>='), $._expression)),              // Relational
+      prec.left(9, seq($._expression, choice('+', '-'), $._expression)),                          // Additive
+      prec.left(10, seq($._expression, choice('*', '/', '%'), $._expression)),                    // Multiplicative: highest
     ),
 
-    // Unary expressions
-    unary_expression: $ => prec.right(8, seq(
+    // Unary expressions (higher precedence than all binary operators)
+    unary_expression: $ => prec.right(11, seq(
       choice('!', '-', '~'),
       $._expression,
     )),
 
     // Update expressions (increment/decrement)
     update_expression: $ => choice(
-      prec.left(11, seq($._expression, '++')),
-      prec.left(11, seq($._expression, '--')),
-      prec.right(11, seq('++', $._expression)),
-      prec.right(11, seq('--', $._expression)),
+      prec.left(12, seq($._expression, '++')),
+      prec.left(12, seq($._expression, '--')),
+      prec.right(12, seq('++', $._expression)),
+      prec.right(12, seq('--', $._expression)),
     ),
 
     // Ternary expression: cond ? true : false

@@ -617,3 +617,119 @@ end
     name: (identifier)
     body: (thread_body
       (end_statement))))
+
+================================================================================
+Operator precedence: arithmetic before bitwise AND
+================================================================================
+
+main:
+    local.x = 1 + 2 & 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number)))
+            (primary_expression
+              (number)))))
+      (end_statement))))
+
+================================================================================
+Operator precedence: bitwise AND before bitwise OR
+================================================================================
+
+main:
+    local.x = 1 | 2 & 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (primary_expression
+              (number))
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number))))))
+      (end_statement))))
+
+================================================================================
+Operator precedence: comparison before bitwise
+================================================================================
+
+main:
+    local.x = 1 == 2 & 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number)))
+            (primary_expression
+              (number)))))
+      (end_statement))))
+
+================================================================================
+Operator precedence: bitwise before logical
+================================================================================
+
+main:
+    local.x = 1 & 2 && 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number)))
+            (primary_expression
+              (number)))))
+      (end_statement))))
