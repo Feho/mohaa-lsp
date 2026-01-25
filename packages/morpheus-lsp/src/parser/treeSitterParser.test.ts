@@ -11,6 +11,7 @@ import {
   nodeAtPosition,
   collectErrors,
   isInitialized,
+  isParserInitialized,
   cleanup,
   positionToPoint,
 } from './treeSitterParser';
@@ -92,6 +93,41 @@ describe('Tree-sitter Parser', () => {
 
   describe('initParser', () => {
     it('should initialize the parser successfully', () => {
+      expect(isInitialized()).toBe(true);
+    });
+
+    it('isParserInitialized should be an alias for isInitialized', () => {
+      expect(isParserInitialized()).toBe(isInitialized());
+    });
+
+    it('should be idempotent - calling multiple times returns same result', async () => {
+      // Parser is already initialized from beforeAll
+      expect(isInitialized()).toBe(true);
+
+      // Call initParser multiple times - should be safe and return immediately
+      await Promise.all([
+        initParser(),
+        initParser(),
+        initParser(),
+      ]);
+
+      // Parser should still be initialized
+      expect(isInitialized()).toBe(true);
+    });
+
+    it('concurrent calls should all resolve without error', async () => {
+      // This tests that concurrent calls don't cause issues when parser
+      // is already initialized (the common case in production)
+      const results = await Promise.allSettled([
+        initParser(),
+        initParser(),
+        initParser(),
+        initParser(),
+        initParser(),
+      ]);
+
+      // All should resolve successfully
+      expect(results.every(r => r.status === 'fulfilled')).toBe(true);
       expect(isInitialized()).toBe(true);
     });
   });

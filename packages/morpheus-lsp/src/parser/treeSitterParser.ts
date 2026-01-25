@@ -12,52 +12,73 @@ import * as path from 'path';
 
 // Dynamic import for web-tree-sitter (handles ESM/CommonJS interop)
 let TreeSitter: typeof Parser;
+let treeSitterInitialized = false;
 
 let parser: Parser | null = null;
 let language: Parser.Language | null = null;
+let initPromise: Promise<void> | null = null;
 
 /**
  * Initialize the tree-sitter parser with the Morpheus language WASM.
  * Must be called before any parsing operations.
+ * 
+ * This function is safe to call concurrently - subsequent calls will wait
+ * for the first initialization to complete rather than creating duplicate
+ * parser instances.
  */
 export async function initParser(): Promise<void> {
+  // Already initialized
   if (parser) return;
+  
+  // Initialization in progress - return existing promise to avoid race condition
+  if (initPromise) return initPromise;
+  
+  // Start initialization and track the promise
+  initPromise = (async () => {
+    try {
+      // Dynamic import to handle ESM/CommonJS interop
+      const module = await import('web-tree-sitter');
+      TreeSitter = module.default || module;
 
-  // Dynamic import to handle ESM/CommonJS interop
-  const module = await import('web-tree-sitter');
-  TreeSitter = module.default || module;
+      // Load the WASM files from the dist directory
+      // When bundled with esbuild, __dirname points to the directory containing server.js
+      // When running from source (vitest), __dirname is .../src/parser
+      let wasmDir: string;
+      
+      if (__dirname.includes('/src/') || __dirname.endsWith('/src')) {
+        // Running from source (e.g., vitest) - WASM is in dist/
+        const packageRoot = __dirname.replace(/\/src\/.*$/, '').replace(/\/src$/, '');
+        wasmDir = path.join(packageRoot, 'dist');
+      } else if (__dirname.includes('/parser')) {
+        // Running from tsc-compiled dist/parser directory
+        wasmDir = __dirname.replace(/\/parser$/, '');
+      } else {
+        // Running from bundled server.js - WASM files are in same directory
+        wasmDir = __dirname;
+      }
+      
+      // Initialize tree-sitter WASM runtime only once per process
+      if (!treeSitterInitialized) {
+        const treeSitterWasm = path.join(wasmDir, 'tree-sitter.wasm');
+        await TreeSitter.init({
+          locateFile: () => treeSitterWasm
+        });
+        treeSitterInitialized = true;
+      }
+      
+      parser = new TreeSitter();
+      
+      const morpheusWasm = path.join(wasmDir, 'tree-sitter-morpheus.wasm');
+      language = await TreeSitter.Language.load(morpheusWasm);
+      parser.setLanguage(language);
+    } catch (error) {
+      // Reset promise so initialization can be retried on failure
+      initPromise = null;
+      throw error;
+    }
+  })();
   
-  await TreeSitter.init();
-  parser = new TreeSitter();
-
-  // Load the WASM files from the dist directory
-  // When bundled with esbuild, __dirname points to the directory containing server.js
-  // When running from source (vitest), __dirname is .../src/parser
-  let wasmDir: string;
-  
-  if (__dirname.includes('/src/') || __dirname.endsWith('/src')) {
-    // Running from source (e.g., vitest) - WASM is in dist/
-    const packageRoot = __dirname.replace(/\/src\/.*$/, '').replace(/\/src$/, '');
-    wasmDir = path.join(packageRoot, 'dist');
-  } else if (__dirname.includes('/parser')) {
-    // Running from tsc-compiled dist/parser directory
-    wasmDir = __dirname.replace(/\/parser$/, '');
-  } else {
-    // Running from bundled server.js - WASM files are in same directory
-    wasmDir = __dirname;
-  }
-  
-  // Initialize tree-sitter with the tree-sitter.wasm runtime
-  const treeSitterWasm = path.join(wasmDir, 'tree-sitter.wasm');
-  await TreeSitter.init({
-    locateFile: () => treeSitterWasm
-  });
-  
-  parser = new TreeSitter();
-  
-  const morpheusWasm = path.join(wasmDir, 'tree-sitter-morpheus.wasm');
-  language = await TreeSitter.Language.load(morpheusWasm);
-  parser.setLanguage(language);
+  return initPromise;
 }
 
 /**
@@ -226,6 +247,11 @@ export function isInitialized(): boolean {
 }
 
 /**
+ * Alias for isInitialized() - check if the parser has been initialized.
+ */
+export const isParserInitialized = isInitialized;
+
+/**
  * Clean up parser resources.
  */
 export function cleanup(): void {
@@ -234,4 +260,5 @@ export function cleanup(): void {
     parser = null;
   }
   language = null;
+  initPromise = null;
 }
