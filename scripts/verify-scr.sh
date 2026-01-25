@@ -4,6 +4,9 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PARSER_DIR="$SCRIPT_DIR/../packages/tree-sitter-morpheus"
 
+# Use tree-sitter directly to avoid npx overhead
+TREE_SITTER="$PARSER_DIR/node_modules/.bin/tree-sitter"
+
 if [ -z "$1" ]; then
     echo "Usage: $0 <directory>"
     echo "Example: $0 /home/feho/dev/main/global"
@@ -17,17 +20,24 @@ if [ ! -d "$TARGET_DIR" ]; then
     exit 1
 fi
 
-# Find all .scr files
-files=$(find "$TARGET_DIR" -name "*.scr" -type f)
-total=$(echo "$files" | wc -l)
+if [ ! -x "$TREE_SITTER" ]; then
+    echo "Error: tree-sitter not found at $TREE_SITTER"
+    echo "Run 'pnpm install' in the project root first"
+    exit 1
+fi
+
+# Find all .scr files and store in array to handle paths with spaces
+readarray -d '' files < <(find "$TARGET_DIR" -name "*.scr" -type f -print0)
+total=${#files[@]}
 errors=0
 error_files=()
 
 echo "Verifying $total .scr files in $TARGET_DIR"
 echo "=========================================="
 
-for file in $files; do
-    result=$(cd "$PARSER_DIR" && npx tree-sitter parse "$file" 2>&1)
+for file in "${files[@]}"; do
+    # Use tree-sitter directly (avoiding npx overhead per file)
+    result=$(cd "$PARSER_DIR" && "$TREE_SITTER" parse "$file" 2>&1)
     
     if echo "$result" | grep -q "ERROR"; then
         ((errors++))

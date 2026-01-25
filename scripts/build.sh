@@ -21,6 +21,25 @@ YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+log() {
+    echo -e "${BLUE}==>${NC} $1"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+warn() {
+    echo -e "${YELLOW}!${NC} $1"
+}
+
+error() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+# Error handler for clearer error messages (must be after error function)
+trap 'error "Build failed at: $BASH_COMMAND"' ERR
+
 # Parse arguments
 BUILD_WASM=false
 PACKAGE=false
@@ -45,22 +64,6 @@ for arg in "$@"; do
     esac
 done
 
-log() {
-    echo -e "${BLUE}==>${NC} $1"
-}
-
-success() {
-    echo -e "${GREEN}✓${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}!${NC} $1"
-}
-
-error() {
-    echo -e "${RED}✗${NC} $1"
-}
-
 cd "$ROOT_DIR"
 
 # Clean if requested
@@ -81,12 +84,15 @@ success "tree-sitter-morpheus built"
 # Build WASM if requested
 if $BUILD_WASM; then
     log "Building tree-sitter WASM..."
-    if [ -f "$HOME/emsdk/emsdk_env.sh" ]; then
-        source "$HOME/emsdk/emsdk_env.sh" 2>/dev/null
+    # Use EMSDK_ENV if set, otherwise check EMSDK, then fallback to ~/emsdk
+    EMSDK_ENV="${EMSDK_ENV:-${EMSDK:-$HOME/emsdk}/emsdk_env.sh}"
+    if [ -f "$EMSDK_ENV" ]; then
+        source "$EMSDK_ENV" 2>/dev/null
         npx tree-sitter build --wasm
         success "WASM built"
     else
-        error "emscripten not found at ~/emsdk/emsdk_env.sh"
+        error "emscripten not found at $EMSDK_ENV"
+        warn "Set EMSDK_ENV or EMSDK environment variable, or install emsdk at ~/emsdk"
         warn "Skipping WASM build - using existing WASM file"
     fi
 fi
@@ -116,15 +122,27 @@ success "vscode-morpheus built"
 if $PACKAGE; then
     log "Packaging VS Code extension..."
     pnpm run package --no-dependencies
-    success "Extension packaged: vscode-morpheus-0.1.0.vsix"
+    VSIX_FILE=$(ls -1t *.vsix 2>/dev/null | head -1)
+    if [ -n "$VSIX_FILE" ]; then
+        success "Extension packaged: $VSIX_FILE"
+    else
+        success "Extension packaged"
+    fi
 fi
 
 # Install if requested
 if $INSTALL; then
     log "Installing VS Code extension..."
-    code --install-extension vscode-morpheus-0.1.0.vsix --force 2>/dev/null
-    success "Extension installed"
-    warn "Reload VS Code to activate"
+    # Find the most recent vsix file
+    VSIX_FILE=$(ls -1t *.vsix 2>/dev/null | head -1)
+    if [ -n "$VSIX_FILE" ]; then
+        code --install-extension "$VSIX_FILE" --force 2>/dev/null
+        success "Extension installed: $VSIX_FILE"
+        warn "Reload VS Code to activate"
+    else
+        error "No .vsix file found in packages/vscode-morpheus/"
+        exit 1
+    fi
 fi
 
 cd "$ROOT_DIR"
