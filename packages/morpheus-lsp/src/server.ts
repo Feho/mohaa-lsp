@@ -239,9 +239,9 @@ function validateSemantics(
       // Find the operator
       for (const child of node.children) {
         if (child.type === '==' && !child.isNamed) {
-          // Check if this is inside a condition
+          // Check if this is inside a condition or an assignment's right-hand side
           let parent: Parser.SyntaxNode | null = node.parent;
-          let insideCondition = false;
+          let insideConditionOrAssignment = false;
 
           while (parent) {
             if (parent.type === 'parenthesized_expression') {
@@ -252,22 +252,31 @@ function validateSemantics(
                 grandparent.type === 'for_statement' ||
                 grandparent.type === 'ternary_expression'
               )) {
-                insideCondition = true;
+                insideConditionOrAssignment = true;
                 break;
+              }
+              // Also allow == inside parentheses on the right side of assignment
+              // e.g., local.x = (a == b)
+              if (grandparent && grandparent.type === 'assignment_expression') {
+                const rightField = grandparent.childForFieldName('right');
+                if (rightField && isDescendantOf(node, rightField)) {
+                  insideConditionOrAssignment = true;
+                  break;
+                }
               }
             }
             // Also check if directly in for loop condition field
             if (parent.type === 'for_statement') {
               const condField = parent.childForFieldName('condition');
               if (condField && isDescendantOf(node, condField)) {
-                insideCondition = true;
+                insideConditionOrAssignment = true;
                 break;
               }
             }
             parent = parent.parent;
           }
 
-          if (!insideCondition) {
+          if (!insideConditionOrAssignment) {
             diagnostics.push({
               severity: DiagnosticSeverity.Warning,
               range: nodeToRange(child),

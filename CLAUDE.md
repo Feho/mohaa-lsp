@@ -8,6 +8,35 @@ Language Server Protocol (LSP) implementation for MOHAA Morpheus Script (`.scr` 
 
 ## Build Commands
 
+### Quick Build Script
+
+```bash
+# Basic build (grammar + LSP + extension)
+./scripts/build.sh
+
+# Full rebuild with WASM, package, and install to VS Code
+./scripts/build.sh --all
+
+# Clean build with packaging
+./scripts/build.sh --clean --package
+
+# Options:
+#   --wasm      Rebuild tree-sitter WASM (requires emscripten)
+#   --package   Package VS Code extension
+#   --install   Install extension to VS Code
+#   --clean     Clean all build artifacts first
+#   --all       Equivalent to --wasm --package --install
+```
+
+### Verify Parser
+
+```bash
+# Test parser against real .scr files
+./scripts/verify-scr.sh /path/to/scripts/folder
+```
+
+### Manual Commands
+
 ```bash
 # Install dependencies (requires pnpm)
 pnpm install

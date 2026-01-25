@@ -52,6 +52,7 @@ pnpm add -g morpheus-lsp
 
 - Node.js 18+
 - pnpm
+- Emscripten (optional, for rebuilding WASM)
 
 ### Setup
 
@@ -64,6 +65,36 @@ pnpm build
 
 # Run tests
 pnpm test
+```
+
+### Build Script
+
+Use the build script for common development tasks:
+
+```bash
+# Basic build (grammar + LSP + extension)
+./scripts/build.sh
+
+# Full rebuild with WASM, package, and install
+./scripts/build.sh --all
+
+# Clean build with packaging
+./scripts/build.sh --clean --package
+
+# Options:
+#   --wasm      Rebuild tree-sitter WASM (requires emscripten)
+#   --package   Package VS Code extension
+#   --install   Install extension to VS Code
+#   --clean     Clean all build artifacts first
+#   --all       Equivalent to --wasm --package --install
+```
+
+### Verify Scripts
+
+Test the parser against real .scr files:
+
+```bash
+./scripts/verify-scr.sh /path/to/scripts/folder
 ```
 
 ### Tree-sitter Grammar
@@ -101,9 +132,12 @@ mohaa-lsp/
 │   ├── tree-sitter-morpheus/   # Grammar
 │   ├── morpheus-lsp/           # Server
 │   └── vscode-morpheus/        # VS Code
-└── editors/
-    ├── neovim/                 # Neovim config
-    └── claude-code/            # Claude Code config
+├── editors/
+│   ├── neovim/                 # Neovim config
+│   └── claude-code/            # Claude Code config
+└── scripts/
+    ├── build.sh                # Build automation
+    └── verify-scr.sh           # Parser verification
 ```
 
 ## License

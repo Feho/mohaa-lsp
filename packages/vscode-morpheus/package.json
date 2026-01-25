@@ -78,9 +78,10 @@
     }
   },
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && npm run copy-server",
+    "copy-server": "mkdir -p dist/server && cp -r ../morpheus-lsp/dist/* dist/server/",
     "watch": "npm run build -- --watch",
-    "package": "vsce package",
+    "package": "npm run build && vsce package",
     "publish": "vsce publish"
   },
   "dependencies": {

@@ -7,7 +7,8 @@
     "morpheus-lsp": "./dist/server.js"
   },
   "scripts": {
-    "build": "tsc && cp -r src/data dist/ && cp ../tree-sitter-morpheus/tree-sitter-morpheus.wasm dist/",
+    "build": "esbuild src/server.ts --bundle --outfile=dist/server.js --format=cjs --platform=node && cp -r src/data dist/ && cp ../tree-sitter-morpheus/tree-sitter-morpheus.wasm dist/ && cp node_modules/web-tree-sitter/tree-sitter.wasm dist/",
+    "build:tsc": "tsc && cp -r src/data dist/ && cp ../tree-sitter-morpheus/tree-sitter-morpheus.wasm dist/ && cp node_modules/web-tree-sitter/tree-sitter.wasm dist/",
     "watch": "tsc -w",
     "clean": "rm -rf dist",
     "lint": "eslint src --ext .ts",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
+    "esbuild": "^0.19.12",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
   },

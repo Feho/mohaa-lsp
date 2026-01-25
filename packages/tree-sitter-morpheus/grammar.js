@@ -18,7 +18,7 @@ module.exports = grammar({
   ],
 
   extras: $ => [
-    /\s/,
+    /[\s\r]/,
     $.comment,
     $._line_continuation,
   ],
@@ -35,23 +35,41 @@ module.exports = grammar({
     [$.scope_keyword, $.self_reference],
     [$.primary_expression, $._vector_component],
     [$.end_statement, $.early_return],
+    [$.parameter_list, $.primary_expression],
   ],
 
   rules: {
-    // Entry point - a script file contains thread definitions
-    source_file: $ => repeat($.thread_definition),
+    // Entry point - a script file contains thread definitions and/or top-level statements
+    // Morpheus allows "main" code at the script level that runs when the script is exec'd
+    source_file: $ => repeat(choice(
+      $.thread_definition,
+      $._top_level_statement,
+    )),
+
+    // Top-level statements that can appear outside of threads
+    _top_level_statement: $ => choice(
+      $.if_statement,
+      $.for_statement,
+      $.while_statement,
+      $.switch_statement,
+      $.try_statement,
+      $.expression_statement,
+      $.empty_statement,
+    ),
 
     // ==================== THREAD STRUCTURE ====================
 
     // Thread definition: mythread local.param1 local.param2:
     //   body statements
     // end
-    thread_definition: $ => seq(
+    // Use high precedence to prefer thread definition over expression_statement
+    // when we see `identifier [scoped_variable...] :`
+    thread_definition: $ => prec(10, seq(
       field('name', $.identifier),
       optional(field('parameters', $.parameter_list)),
       ':',
       field('body', $.thread_body),
-    ),
+    )),
 
     parameter_list: $ => repeat1($.scoped_variable),
 
@@ -329,7 +347,8 @@ module.exports = grammar({
     ),
 
     // Self and owner can be used as standalone entity references
-    self_reference: $ => choice('self', 'owner'),
+    // Level, game, and group can also be used as targets for commands
+    self_reference: $ => choice('self', 'owner', 'level', 'game', 'group'),
 
     // Entity reference: $entityname or $("dynamic")
     entity_reference: $ => choice(

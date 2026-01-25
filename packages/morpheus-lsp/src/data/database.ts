@@ -91,7 +91,7 @@ export class FunctionDatabaseLoader {
   async load(): Promise<void> {
     if (this.loaded) return;
 
-    const dataDir = path.join(__dirname);
+    const dataDir = path.join(__dirname, 'data');
 
     try {
       const morpheusPath = path.join(dataDir, 'Morpheus.json');

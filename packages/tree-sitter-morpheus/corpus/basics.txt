@@ -581,3 +581,39 @@ end
             (primary_expression
               (string)))))
       (end_statement))))
+
+================================================================================
+Top level statements
+================================================================================
+
+if(level.loaded != 1)
+{
+  exec global/utils.scr
+}
+
+main:
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (if_statement
+    condition: (parenthesized_expression
+      (binary_expression
+        (primary_expression
+          (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier)))
+        (primary_expression
+          (number))))
+    consequence: (block_or_statement
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (call_expression
+              function: (identifier)))))))
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (end_statement))))
