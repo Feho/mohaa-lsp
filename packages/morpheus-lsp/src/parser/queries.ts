@@ -33,6 +33,18 @@ const VARIABLE_ASSIGNMENT_QUERY_SOURCE = `
 )
 `;
 
+// Secondary query for level/game/group variables parsed as member_expression
+// The grammar parses level.x, game.y, group.z as member_expression with self_reference
+const MEMBER_VARIABLE_ASSIGNMENT_QUERY_SOURCE = `
+(assignment_expression
+  left: (member_expression
+    object: (primary_expression
+      (self_reference) @scope)
+    property: (identifier) @name
+  )
+)
+`;
+
 const CALL_EXPRESSION_QUERY_SOURCE = `
 (call_expression
   target: (_)? @target
@@ -51,6 +63,7 @@ const GOTO_QUERY_SOURCE = `
 let threadQuery: Parser.Query | null = null;
 let labelQuery: Parser.Query | null = null;
 let variableQuery: Parser.Query | null = null;
+let memberVariableQuery: Parser.Query | null = null;
 let callQuery: Parser.Query | null = null;
 let gotoQuery: Parser.Query | null = null;
 
@@ -82,6 +95,16 @@ function getVariableQuery(): Parser.Query {
     variableQuery = getLanguage().query(VARIABLE_ASSIGNMENT_QUERY_SOURCE);
   }
   return variableQuery;
+}
+
+/**
+ * Get or compile the member variable assignment query (for level.x, game.y, group.z).
+ */
+function getMemberVariableQuery(): Parser.Query {
+  if (!memberVariableQuery) {
+    memberVariableQuery = getLanguage().query(MEMBER_VARIABLE_ASSIGNMENT_QUERY_SOURCE);
+  }
+  return memberVariableQuery;
 }
 
 /**
@@ -182,19 +205,51 @@ export { VariableDefinition } from '../data/types';
 /**
  * Extract all unique variable definitions from a syntax tree.
  * Returns first occurrence of each scope.name combination.
+ * Handles both scoped_variable (local.x) and member_expression (level.y) patterns.
  */
 export function findVariables(tree: Parser.Tree, uri: string): VariableDefinition[] {
-  const query = getVariableQuery();
-  const matches = query.matches(tree.rootNode);
   const seen = new Map<string, VariableDefinition>();
 
-  for (const match of matches) {
+  // Query for scoped_variable pattern (local.x, parm.y, etc.)
+  const scopedQuery = getVariableQuery();
+  const scopedMatches = scopedQuery.matches(tree.rootNode);
+
+  for (const match of scopedMatches) {
     const scopeNode = match.captures.find(c => c.name === 'scope')?.node;
     const nameNode = match.captures.find(c => c.name === 'name')?.node;
 
     if (!scopeNode || !nameNode) continue;
 
     const scope = scopeNode.text;
+    const name = nameNode.text;
+    const key = `${scope}.${name}`;
+
+    // Only keep first occurrence
+    if (!seen.has(key)) {
+      seen.set(key, {
+        name,
+        scope,
+        line: nameNode.startPosition.row,
+        character: nameNode.startPosition.column,
+        uri,
+      });
+    }
+  }
+
+  // Query for member_expression pattern (level.x, game.y, group.z)
+  const memberQuery = getMemberVariableQuery();
+  const memberMatches = memberQuery.matches(tree.rootNode);
+
+  for (const match of memberMatches) {
+    const scopeNode = match.captures.find(c => c.name === 'scope')?.node;
+    const nameNode = match.captures.find(c => c.name === 'name')?.node;
+
+    if (!scopeNode || !nameNode) continue;
+
+    const scope = scopeNode.text;
+    // Only include level, game, group (not self, owner)
+    if (!['level', 'game', 'group'].includes(scope)) continue;
+
     const name = nameNode.text;
     const key = `${scope}.${name}`;
 
@@ -353,6 +408,10 @@ export function resetQueries(): void {
   if (variableQuery) {
     variableQuery.delete();
     variableQuery = null;
+  }
+  if (memberVariableQuery) {
+    memberVariableQuery.delete();
+    memberVariableQuery = null;
   }
   if (callQuery) {
     callQuery.delete();

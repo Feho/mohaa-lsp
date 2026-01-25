@@ -10,11 +10,9 @@
 module.exports = grammar({
   name: 'morpheus',
 
-  // External scanner for complex tokens
+  // External scanner for line continuation
   externals: $ => [
     $._line_continuation,
-    $.unquoted_string,
-    $.file_path,
   ],
 
   extras: $ => [

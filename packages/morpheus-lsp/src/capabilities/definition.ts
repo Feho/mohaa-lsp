@@ -12,6 +12,7 @@ import {
   Range,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import { URI } from 'vscode-uri';
 import Parser from 'web-tree-sitter';
 import { DocumentManager } from '../parser/documentManager';
 import {
@@ -21,6 +22,7 @@ import {
   positionToPoint,
   findAncestor,
 } from '../parser/treeSitterParser';
+import { findContainingThread } from '../parser/queries';
 
 export class DefinitionProvider {
   constructor(private documentManager: DocumentManager) {}
@@ -90,6 +92,40 @@ export class DefinitionProvider {
       return this.findLabelDefinition(word, document);
     }
 
+    // Check if this is a scoped variable (local.x, level.y, etc.)
+    if (parent?.type === 'scoped_variable') {
+      const scopeNode = parent.childForFieldName('scope');
+      if (scopeNode) {
+        const scope = scopeNode.text;
+        return this.findVariableDefinition(document, tree, scope, word, position);
+      }
+    }
+
+    // Check if this is a member_expression with self_reference (level.x, game.y, group.z)
+    // The grammar parses these as member_expression instead of scoped_variable
+    if (parent?.type === 'member_expression') {
+      const objectNode = parent.childForFieldName('object');
+      const propertyNode = parent.childForFieldName('property');
+      if (propertyNode?.id === targetNode.id && objectNode) {
+        // Check if the object is a self_reference (level, game, group, etc.)
+        const selfRef = objectNode.type === 'primary_expression' 
+          ? objectNode.firstNamedChild 
+          : objectNode;
+        if (selfRef?.type === 'self_reference') {
+          const scope = selfRef.text;
+          if (['level', 'game', 'group'].includes(scope)) {
+            return this.findVariableDefinition(document, tree, scope, word, position);
+          }
+        }
+      }
+    }
+
+    // Check if this is a file path reference (exec path.scr, thread path.scr::label)
+    const filePathResult = this.findFilePathDefinition(document, tree, targetNode, position);
+    if (filePathResult) {
+      return filePathResult;
+    }
+
     // Check if this is a function name in a call expression
     if (parent?.type === 'call_expression') {
       const funcNode = parent.childForFieldName('function');
@@ -149,7 +185,33 @@ export class DefinitionProvider {
     const wordInfo = this.getWordAtPosition(text, offset);
     if (!wordInfo) return null;
 
-    const { word } = wordInfo;
+    const { word, start } = wordInfo;
+
+    // Check for scoped variable: local.var, level.var, etc.
+    const scopedVarMatch = this.getScopedVariableAtPosition(text, offset);
+    if (scopedVarMatch) {
+      return this.findVariableDefinitionRegex(document, scopedVarMatch.scope, scopedVarMatch.name);
+    }
+
+    // Check for file path reference: exec path.scr
+    const pathInfo = this.getFilePathAtPosition(text, offset);
+    if (pathInfo) {
+      const beforePath = text.substring(0, pathInfo.start).trimEnd();
+      const execMatch = beforePath.match(/(exec|thread|waitthread)\s*$/i);
+      if (execMatch) {
+        let scrPath = pathInfo.path;
+        let label: string | null = null;
+        const labelMatch = scrPath.match(/^(.+\.scr)::(\w+)$/i);
+        if (labelMatch) {
+          scrPath = labelMatch[1];
+          label = labelMatch[2];
+        }
+        if (scrPath.toLowerCase().endsWith('.scr')) {
+          const result = this.resolveScriptPath(scrPath, label);
+          if (result) return result;
+        }
+      }
+    }
 
     // Check for cross-file reference: exec path.scr::label
     const crossFileMatch = this.getCrossFileReference(text, offset);
@@ -324,6 +386,70 @@ export class DefinitionProvider {
   }
 
   /**
+   * Get scoped variable at offset position (e.g., local.myvar, level.counter).
+   */
+  private getScopedVariableAtPosition(text: string, offset: number): { scope: string; name: string } | null {
+    // Find the extent of the potential scoped variable
+    let start = offset;
+    let end = offset;
+
+    // Expand to include valid identifier chars and dots
+    while (start > 0 && /[\w.]/.test(text[start - 1])) {
+      start--;
+    }
+    while (end < text.length && /[\w]/.test(text[end])) {
+      end++;
+    }
+
+    const candidate = text.substring(start, end);
+    const match = candidate.match(/^(local|level|game|group|parm|self|owner)\.(\w+)$/);
+    if (match) {
+      return { scope: match[1], name: match[2] };
+    }
+
+    return null;
+  }
+
+  /**
+   * Find variable definition using regex (fallback when tree-sitter unavailable).
+   */
+  private findVariableDefinitionRegex(
+    document: TextDocument,
+    scope: string,
+    name: string
+  ): Definition | null {
+    const fullName = `${scope}.${name}`;
+
+    // Search in current document first
+    const variables = this.documentManager.getVariables(document.uri);
+    const variable = variables.find(v => v.name === fullName);
+    if (variable) {
+      return Location.create(variable.uri, {
+        start: { line: variable.line, character: variable.character },
+        end: { line: variable.line, character: variable.character + name.length },
+      });
+    }
+
+    // For level/game variables, search other documents
+    if (scope === 'level' || scope === 'game') {
+      const allDocs = this.documentManager.getAllDocuments();
+      for (const doc of allDocs) {
+        if (doc.uri === document.uri) continue;
+        const docVars = this.documentManager.getVariables(doc.uri);
+        const found = docVars.find(v => v.name === fullName);
+        if (found) {
+          return Location.create(found.uri, {
+            start: { line: found.line, character: found.character },
+            end: { line: found.line, character: found.character + name.length },
+          });
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Check for cross-file reference pattern (path.scr::label)
    */
   private getCrossFileReference(text: string, offset: number): { file: string; label: string } | null {
@@ -408,6 +534,232 @@ export class DefinitionProvider {
         start: pos,
         end: { line: pos.line, character: pos.character + labelName.length },
       });
+    }
+
+    return null;
+  }
+
+  /**
+   * Find variable definition (first assignment) for a scoped variable.
+   * For local variables, searches only within the containing thread.
+   * For level/game variables, searches across all documents.
+   */
+  private findVariableDefinition(
+    document: TextDocument,
+    tree: Parser.Tree,
+    scope: string,
+    name: string,
+    position: Position
+  ): Definition | null {
+    const fullName = `${scope}.${name}`;
+
+    // For local variables, restrict search to the containing thread
+    if (scope === 'local') {
+      const containingThread = findContainingThread(tree, position.line, position.character);
+      if (containingThread) {
+        // Search within the thread for the first assignment to this variable
+        const result = this.findVariableInNode(containingThread, scope, name, document.uri);
+        if (result) return result;
+      }
+      // Fall back to document-level search if we can't find the thread
+    }
+
+    // For level/game/group variables, search in current document first
+    const variables = this.documentManager.getVariables(document.uri);
+    const variable = variables.find(v => v.name === fullName);
+    if (variable) {
+      return Location.create(variable.uri, {
+        start: { line: variable.line, character: variable.character },
+        end: { line: variable.line, character: variable.character + name.length },
+      });
+    }
+
+    // For level/game variables, also search other documents
+    if (scope === 'level' || scope === 'game') {
+      const allDocs = this.documentManager.getAllDocuments();
+      for (const doc of allDocs) {
+        if (doc.uri === document.uri) continue; // Already searched
+        const docVars = this.documentManager.getVariables(doc.uri);
+        const found = docVars.find(v => v.name === fullName);
+        if (found) {
+          return Location.create(found.uri, {
+            start: { line: found.line, character: found.character },
+            end: { line: found.line, character: found.character + name.length },
+          });
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Find the first assignment to a variable within a specific AST node.
+   */
+  private findVariableInNode(
+    node: Parser.SyntaxNode,
+    scope: string,
+    name: string,
+    uri: string
+  ): Definition | null {
+    const walker = node.walk();
+    const visited = new Set<number>();
+
+    const search = (): Definition | null => {
+      const current = walker.currentNode;
+      if (visited.has(current.id)) return null;
+      visited.add(current.id);
+
+      // Look for assignment_expression with matching scoped_variable on left
+      if (current.type === 'assignment_expression') {
+        const left = current.childForFieldName('left');
+        if (left?.type === 'scoped_variable') {
+          const scopeNode = left.childForFieldName('scope');
+          const nameNode = left.childForFieldName('name');
+          if (scopeNode?.text === scope && nameNode?.text === name) {
+            return Location.create(uri, {
+              start: { line: nameNode.startPosition.row, character: nameNode.startPosition.column },
+              end: { line: nameNode.endPosition.row, character: nameNode.endPosition.column },
+            });
+          }
+        }
+      }
+
+      // Recurse into children
+      if (walker.gotoFirstChild()) {
+        do {
+          const result = search();
+          if (result) return result;
+        } while (walker.gotoNextSibling());
+        walker.gotoParent();
+      }
+
+      return null;
+    };
+
+    return search();
+  }
+
+  /**
+   * Find definition for a file path reference (exec path.scr, thread path.scr::label).
+   * Detects paths following exec/thread/waitthread keywords.
+   */
+  private findFilePathDefinition(
+    document: TextDocument,
+    tree: Parser.Tree,
+    targetNode: Parser.SyntaxNode,
+    position: Position
+  ): Definition | null {
+    const text = document.getText();
+    const offset = document.offsetAt(position);
+
+    // Get the file path at the cursor position
+    const pathInfo = this.getFilePathAtPosition(text, offset);
+    if (!pathInfo) return null;
+
+    // Check if the path is preceded by exec/thread/waitthread
+    const beforePath = text.substring(0, pathInfo.start).trimEnd();
+    const execMatch = beforePath.match(/(exec|thread|waitthread)\s*$/i);
+    if (!execMatch) return null;
+
+    // Extract the .scr path (without ::label if present)
+    let scrPath = pathInfo.path;
+    let label: string | null = null;
+    const labelMatch = scrPath.match(/^(.+\.scr)::(\w+)$/i);
+    if (labelMatch) {
+      scrPath = labelMatch[1];
+      label = labelMatch[2];
+    }
+
+    // Ensure it ends with .scr
+    if (!scrPath.toLowerCase().endsWith('.scr')) {
+      return null;
+    }
+
+    // Try to find the file in open documents
+    const result = this.resolveScriptPath(scrPath, label);
+    if (result) return result;
+
+    return null;
+  }
+
+  /**
+   * Get the file path at a given offset position.
+   * Returns the path string and its start/end offsets.
+   */
+  private getFilePathAtPosition(text: string, offset: number): { path: string; start: number; end: number } | null {
+    // Characters that can appear in file paths
+    const isPathChar = (c: string) => /[\w/.:-]/.test(c);
+
+    let start = offset;
+    let end = offset;
+
+    // Expand backwards
+    while (start > 0 && isPathChar(text[start - 1])) {
+      start--;
+    }
+
+    // Expand forwards
+    while (end < text.length && isPathChar(text[end])) {
+      end++;
+    }
+
+    if (start === end) return null;
+
+    const path = text.substring(start, end);
+    
+    // Must look like a path (contain / or end with .scr)
+    if (!path.includes('/') && !path.toLowerCase().endsWith('.scr')) {
+      return null;
+    }
+
+    return { path, start, end };
+  }
+
+  /**
+   * Resolve a script path to a location in an open document.
+   * If label is provided, jumps to that label/thread within the file.
+   */
+  private resolveScriptPath(scrPath: string, label: string | null): Definition | null {
+    const documents = this.documentManager.getAllDocuments();
+    const normalizedPath = scrPath.toLowerCase().replace(/\\/g, '/');
+
+    for (const doc of documents) {
+      // Check if the document URI ends with the script path
+      const docPath = URI.parse(doc.uri).fsPath.toLowerCase().replace(/\\/g, '/');
+      if (docPath.endsWith(normalizedPath)) {
+        if (label) {
+          // Find the label or thread in the file
+          const text = doc.getText();
+          
+          // Try to find as a label first
+          const labelRegex = new RegExp(`^${this.escapeRegex(label)}\\s*:`, 'm');
+          const match = labelRegex.exec(text);
+          if (match) {
+            const pos = doc.positionAt(match.index);
+            return Location.create(doc.uri, {
+              start: pos,
+              end: { line: pos.line, character: pos.character + label.length },
+            });
+          }
+
+          // Try to find as a thread
+          const threadDef = this.documentManager.getThreads(doc.uri)
+            .find(t => t.name.toLowerCase() === label.toLowerCase());
+          if (threadDef) {
+            return Location.create(doc.uri, {
+              start: { line: threadDef.line, character: threadDef.character },
+              end: { line: threadDef.line, character: threadDef.character + threadDef.name.length },
+            });
+          }
+        }
+
+        // No label, just go to the start of the file
+        return Location.create(doc.uri, {
+          start: { line: 0, character: 0 },
+          end: { line: 0, character: 0 },
+        });
+      }
     }
 
     return null;
