@@ -398,3 +398,186 @@ end 42
       (end_statement
         value: (primary_expression
           (number))))))
+
+================================================================================
+Doc comment at file start
+================================================================================
+
+/**
+ * Doc comment
+ */
+main:
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (comment)
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (end_statement))))
+
+================================================================================
+Self reference standalone
+================================================================================
+
+main:
+  if (self)
+  {
+    self kill
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (if_statement
+        condition: (parenthesized_expression
+          (primary_expression
+            (self_reference)))
+        consequence: (block_or_statement
+          (expression_statement
+            (call_expression
+              target: (self_reference)
+              function: (identifier)))))
+      (end_statement))))
+
+================================================================================
+Increment operator
+================================================================================
+
+main:
+  for (local.i = 0; local.i < 10; local.i++)
+  {
+    println local.i
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (for_statement
+        init: (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (primary_expression
+            (number)))
+        condition: (binary_expression
+          (primary_expression
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier)))
+          (primary_expression
+            (number)))
+        update: (update_expression
+          (primary_expression
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier))))
+        body: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))))
+      (end_statement))))
+
+================================================================================
+Early return
+================================================================================
+
+main:
+  if (!self) end
+  println "alive"
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (if_statement
+        condition: (parenthesized_expression
+          (unary_expression
+            (primary_expression
+              (self_reference))))
+        consequence: (block_or_statement
+          (early_return)))
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (primary_expression
+              (string)))))
+      (end_statement))))
+
+================================================================================
+Vector with variable
+================================================================================
+
+main:
+  self.angles = (0 local.angle 0)
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (primary_expression
+            (vector
+              (number)
+              (scoped_variable
+                scope: (scope_keyword)
+                name: (identifier))
+              (number)))))
+      (end_statement))))
+
+================================================================================
+Make array
+================================================================================
+
+main:
+  local.arr = makeArray
+    "one"
+    "two"
+    "three"
+  endArray
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (make_array
+            (primary_expression
+              (string))
+            (primary_expression
+              (string))
+            (primary_expression
+              (string)))))
+      (end_statement))))

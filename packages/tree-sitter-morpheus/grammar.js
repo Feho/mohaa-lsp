@@ -29,11 +29,12 @@ module.exports = grammar({
     [$.primary_expression, $.call_expression],
     [$.ternary_expression, $.argument_list],
     [$.argument_list, $.const_array],
-    [$.parameter_list, $.primary_expression],
     [$.call_expression],
     [$.ternary_expression, $.const_array],
     [$.const_array],
-    [$.end_statement],
+    [$.scope_keyword, $.self_reference],
+    [$.primary_expression, $._vector_component],
+    [$.end_statement, $.early_return],
   ],
 
   rules: {
@@ -60,11 +61,18 @@ module.exports = grammar({
       $.end_statement,
     ),
 
-    // End statement terminates a thread (optionally with return value on same line)
-    // Use prec(-1) to prefer other interpretations when there's ambiguity
+    // End statement terminates a thread (optionally with return value)
+    // The return value should be simple (variable or literal), not a complex expression
+    // Use prec(-1) to avoid consuming the next thread's identifier
     end_statement: $ => seq(
       'end',
-      optional(prec(-1, field('value', $._expression))),
+      optional(prec(-1, field('value', choice(
+        $.scoped_variable,
+        $.identifier,
+        $.number,
+        $.string,
+        $.nil,
+      )))),
     ),
 
     // ==================== STATEMENTS ====================
@@ -80,6 +88,7 @@ module.exports = grammar({
       $.break_statement,
       $.continue_statement,
       $.goto_statement,
+      $.early_return,
       $.expression_statement,
       $.empty_statement,
     ),
@@ -173,6 +182,10 @@ module.exports = grammar({
     break_statement: $ => 'break',
     continue_statement: $ => 'continue',
 
+    // Early return (end used inside blocks for early exit, typically without return value)
+    // Thread-level end with return value is handled by end_statement
+    early_return: $ => prec(-2, 'end'),
+
     goto_statement: $ => seq(
       'goto',
       field('label', $.identifier),
@@ -184,11 +197,13 @@ module.exports = grammar({
       $.assignment_expression,
       $.binary_expression,
       $.unary_expression,
+      $.update_expression,
       $.call_expression,
       $.member_expression,
       $.subscript_expression,
       $.primary_expression,
       $.const_array,
+      $.make_array,
       $.parenthesized_expression,
       $.ternary_expression,
     ),
@@ -197,6 +212,7 @@ module.exports = grammar({
       $.identifier,
       $.scoped_variable,
       $.entity_reference,
+      $.self_reference,
       $.number,
       $.string,
       $.nil,
@@ -233,6 +249,14 @@ module.exports = grammar({
       $._expression,
     )),
 
+    // Update expressions (increment/decrement)
+    update_expression: $ => choice(
+      prec.left(11, seq($._expression, '++')),
+      prec.left(11, seq($._expression, '--')),
+      prec.right(11, seq('++', $._expression)),
+      prec.right(11, seq('--', $._expression)),
+    ),
+
     // Ternary expression: cond ? true : false
     ternary_expression: $ => prec.right(0, seq(
       field('condition', $._expression),
@@ -248,6 +272,7 @@ module.exports = grammar({
         $.scoped_variable,
         $.entity_reference,
         $.member_expression,
+        $.self_reference,
         $.identifier,
       ))),
       field('function', $.identifier),
@@ -277,9 +302,16 @@ module.exports = grammar({
       repeat1(seq('::', $._expression)),
     )),
 
+    // Make array: makeArray expr1 expr2 ... endArray
+    make_array: $ => seq(
+      'makeArray',
+      repeat($._expression),
+      'endArray',
+    ),
+
     // ==================== VARIABLES ====================
 
-    // Scoped variables: local.var, level.var, game.var, group.var, parm.var
+    // Scoped variables: local.var, level.var, game.var, group.var, parm.var, self.var, owner.var
     scoped_variable: $ => seq(
       field('scope', $.scope_keyword),
       '.',
@@ -295,6 +327,9 @@ module.exports = grammar({
       'self',
       'owner',
     ),
+
+    // Self and owner can be used as standalone entity references
+    self_reference: $ => choice('self', 'owner'),
 
     // Entity reference: $entityname or $("dynamic")
     entity_reference: $ => choice(
@@ -331,13 +366,23 @@ module.exports = grammar({
 
     boolean: $ => choice('true', 'false'),
 
-    // Vector literal: (x y z)
-    vector: $ => seq(
+    // Vector literal: (x y z) - can contain numbers, variables, or expressions
+    // Use high precedence to prefer vector over parenthesized expression when 3 components
+    vector: $ => prec(15, seq(
       '(',
-      $.number,
-      $.number,
-      $.number,
+      $._vector_component,
+      $._vector_component,
+      $._vector_component,
       ')',
+    )),
+
+    // Vector components can be numbers, negated numbers, or scoped variables
+    _vector_component: $ => choice(
+      $.number,
+      $.scoped_variable,
+      $.self_reference,
+      $.identifier,
+      seq('-', $.number),
     ),
 
     // ==================== COMMENTS ====================
@@ -345,10 +390,8 @@ module.exports = grammar({
     comment: $ => choice(
       // Line comment
       seq('//', /.*/),
-      // Block comment
-      seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/'),
-      // Doc comment
-      seq('/**', /[^*]*\*+([^/*][^*]*\*+)*/, '/'),
+      // Block comment (/* ... */) - matches any content between /* and */
+      /\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\//,
     ),
   },
 });
