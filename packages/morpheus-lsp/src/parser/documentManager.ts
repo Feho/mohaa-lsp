@@ -53,48 +53,66 @@ export class DocumentManager {
   updateDocument(document: TextDocument): void {
     const text = document.getText();
     const uri = document.uri;
-
-    let tree: Parser.Tree | null = null;
-    let threads: ThreadDefinition[];
-    let labels: SymbolInfo[];
-    let variables: SymbolInfo[];
+    const existing = this.documents.get(uri);
 
     // Use tree-sitter if initialized
     if (isInitialized()) {
-      tree = parseDocument(text);
-      threads = findThreads(tree, uri);
-      labels = findLabels(tree, uri).map(label => ({
-        ...label,
-        kind: 'label' as const,
-      }));
-      variables = findVariables(tree, uri).map(v => ({
-        name: `${v.scope}.${v.name}`,
-        kind: 'variable' as const,
-        scope: v.scope,
-        line: v.line,
-        character: v.character,
-        uri: v.uri,
-      }));
+      try {
+        // Parse new tree first before deleting old one
+        const newTree = parseDocument(text);
+        const threads = findThreads(newTree, uri);
+        const labels = findLabels(newTree, uri).map(label => ({
+          ...label,
+          kind: 'label' as const,
+        }));
+        const variables = findVariables(newTree, uri).map(v => ({
+          name: `${v.scope}.${v.name}`,
+          kind: 'variable' as const,
+          scope: v.scope,
+          line: v.line,
+          character: v.character,
+          uri: v.uri,
+        }));
+
+        // Only delete old tree after successful parsing and symbol extraction
+        if (existing?.tree) {
+          existing.tree.delete();
+        }
+
+        this.documents.set(uri, {
+          document,
+          tree: newTree,
+          threads,
+          labels,
+          variables,
+        });
+      } catch (error) {
+        // Log error and fall back to regex parsing
+        console.error(`Failed to parse document ${uri}:`, error);
+
+        // Keep existing tree if available
+        this.documents.set(uri, {
+          document,
+          tree: existing?.tree ?? null,
+          threads: this.parseThreadsRegex(text, uri),
+          labels: this.parseLabelsRegex(text, uri),
+          variables: this.parseVariablesRegex(text, uri),
+        });
+      }
     } else {
-      // Fallback to regex parsing
-      threads = this.parseThreadsRegex(text, uri);
-      labels = this.parseLabelsRegex(text, uri);
-      variables = this.parseVariablesRegex(text, uri);
-    }
+      // Fallback to regex parsing (no tree-sitter available)
+      if (existing?.tree) {
+        existing.tree.delete();
+      }
 
-    // Clean up old tree if it exists
-    const existing = this.documents.get(uri);
-    if (existing?.tree) {
-      existing.tree.delete();
+      this.documents.set(uri, {
+        document,
+        tree: null,
+        threads: this.parseThreadsRegex(text, uri),
+        labels: this.parseLabelsRegex(text, uri),
+        variables: this.parseVariablesRegex(text, uri),
+      });
     }
-
-    this.documents.set(uri, {
-      document,
-      tree,
-      threads,
-      labels,
-      variables,
-    });
   }
 
   /**
@@ -114,48 +132,67 @@ export class DocumentManager {
       return;
     }
 
-    let tree = existing.tree;
+    const oldTree = existing.tree;
     const oldDocument = existing.document;
 
-    // Apply edits to the tree
-    for (const change of changes) {
-      if ('range' in change) {
-        const startOffset = oldDocument.offsetAt(change.range.start);
-        const endOffset = oldDocument.offsetAt(change.range.end);
-        const edit = createEdit(oldDocument, startOffset, endOffset, change.text);
-        tree.edit(edit);
+    try {
+      // Clone the tree for editing so we don't modify the original
+      const editableTree = oldTree.copy();
+
+      // Apply edits to the cloned tree
+      for (const change of changes) {
+        if ('range' in change) {
+          const startOffset = oldDocument.offsetAt(change.range.start);
+          const endOffset = oldDocument.offsetAt(change.range.end);
+          const edit = createEdit(oldDocument, startOffset, endOffset, change.text);
+          editableTree.edit(edit);
+        }
       }
+
+      // Re-parse with the edited tree for incremental parsing
+      const text = document.getText();
+      const newTree = parseIncremental(text, editableTree);
+
+      // Clean up the editable tree (it's no longer needed after parsing)
+      editableTree.delete();
+
+      // Re-extract symbols from new tree
+      const threads = findThreads(newTree, uri);
+      const labels = findLabels(newTree, uri).map(label => ({
+        ...label,
+        kind: 'label' as const,
+      }));
+      const variables = findVariables(newTree, uri).map(v => ({
+        name: `${v.scope}.${v.name}`,
+        kind: 'variable' as const,
+        scope: v.scope,
+        line: v.line,
+        character: v.character,
+        uri: v.uri,
+      }));
+
+      // Only delete old tree after successful parsing and symbol extraction
+      oldTree.delete();
+
+      this.documents.set(uri, {
+        document,
+        tree: newTree,
+        threads,
+        labels,
+        variables,
+      });
+    } catch (error) {
+      // Log error and fall back to regex parsing, preserving old tree
+      console.error(`Failed to incrementally parse document ${uri}:`, error);
+
+      this.documents.set(uri, {
+        document,
+        tree: oldTree, // Keep the old tree
+        threads: this.parseThreadsRegex(document.getText(), uri),
+        labels: this.parseLabelsRegex(document.getText(), uri),
+        variables: this.parseVariablesRegex(document.getText(), uri),
+      });
     }
-
-    // Re-parse with the edited tree for incremental parsing
-    const text = document.getText();
-    const newTree = parseIncremental(text, tree);
-    
-    // Clean up old tree
-    tree.delete();
-
-    // Re-extract symbols from new tree
-    const threads = findThreads(newTree, uri);
-    const labels = findLabels(newTree, uri).map(label => ({
-      ...label,
-      kind: 'label' as const,
-    }));
-    const variables = findVariables(newTree, uri).map(v => ({
-      name: `${v.scope}.${v.name}`,
-      kind: 'variable' as const,
-      scope: v.scope,
-      line: v.line,
-      character: v.character,
-      uri: v.uri,
-    }));
-
-    this.documents.set(uri, {
-      document,
-      tree: newTree,
-      threads,
-      labels,
-      variables,
-    });
   }
 
   /**
