@@ -1,5 +1,7 @@
 /**
  * Document manager for tracking open documents and symbols
+ * 
+ * Uses tree-sitter for parsing when available, with fallback to regex-based parsing.
  */
 
 import {
@@ -9,12 +11,27 @@ import {
   WorkspaceSymbol,
   SymbolInformation,
   Location,
+  TextDocumentContentChangeEvent,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { ThreadDefinition, SymbolInfo } from '../data/types';
+import Parser from 'web-tree-sitter';
+import { ThreadDefinition, SymbolInfo, LabelDefinition, VariableDefinition } from '../data/types';
+import {
+  parseDocument,
+  parseIncremental,
+  createEdit,
+  isInitialized,
+  nodeToRange,
+} from './treeSitterParser';
+import {
+  findThreads,
+  findLabels,
+  findVariables,
+} from './queries';
 
 interface DocumentInfo {
   document: TextDocument;
+  tree: Parser.Tree | null;
   threads: ThreadDefinition[];
   labels: SymbolInfo[];
   variables: SymbolInfo[];
@@ -35,12 +52,106 @@ export class DocumentManager {
    */
   updateDocument(document: TextDocument): void {
     const text = document.getText();
-    const threads = this.parseThreads(text, document.uri);
-    const labels = this.parseLabels(text, document.uri);
-    const variables = this.parseVariables(text, document.uri);
+    const uri = document.uri;
 
-    this.documents.set(document.uri, {
+    let tree: Parser.Tree | null = null;
+    let threads: ThreadDefinition[];
+    let labels: SymbolInfo[];
+    let variables: SymbolInfo[];
+
+    // Use tree-sitter if initialized
+    if (isInitialized()) {
+      tree = parseDocument(text);
+      threads = findThreads(tree, uri);
+      labels = findLabels(tree, uri).map(label => ({
+        ...label,
+        kind: 'label' as const,
+      }));
+      variables = findVariables(tree, uri).map(v => ({
+        name: `${v.scope}.${v.name}`,
+        kind: 'variable' as const,
+        scope: v.scope,
+        line: v.line,
+        character: v.character,
+        uri: v.uri,
+      }));
+    } else {
+      // Fallback to regex parsing
+      threads = this.parseThreadsRegex(text, uri);
+      labels = this.parseLabelsRegex(text, uri);
+      variables = this.parseVariablesRegex(text, uri);
+    }
+
+    // Clean up old tree if it exists
+    const existing = this.documents.get(uri);
+    if (existing?.tree) {
+      existing.tree.delete();
+    }
+
+    this.documents.set(uri, {
       document,
+      tree,
+      threads,
+      labels,
+      variables,
+    });
+  }
+
+  /**
+   * Incrementally update document after a change event.
+   * More efficient than full re-parse for small changes.
+   */
+  updateDocumentIncremental(
+    document: TextDocument,
+    changes: TextDocumentContentChangeEvent[]
+  ): void {
+    const uri = document.uri;
+    const existing = this.documents.get(uri);
+
+    // If we don't have tree-sitter or no existing tree, fall back to full update
+    if (!isInitialized() || !existing?.tree) {
+      this.updateDocument(document);
+      return;
+    }
+
+    let tree = existing.tree;
+    const oldDocument = existing.document;
+
+    // Apply edits to the tree
+    for (const change of changes) {
+      if ('range' in change) {
+        const startOffset = oldDocument.offsetAt(change.range.start);
+        const endOffset = oldDocument.offsetAt(change.range.end);
+        const edit = createEdit(oldDocument, startOffset, endOffset, change.text);
+        tree.edit(edit);
+      }
+    }
+
+    // Re-parse with the edited tree for incremental parsing
+    const text = document.getText();
+    const newTree = parseIncremental(text, tree);
+    
+    // Clean up old tree
+    tree.delete();
+
+    // Re-extract symbols from new tree
+    const threads = findThreads(newTree, uri);
+    const labels = findLabels(newTree, uri).map(label => ({
+      ...label,
+      kind: 'label' as const,
+    }));
+    const variables = findVariables(newTree, uri).map(v => ({
+      name: `${v.scope}.${v.name}`,
+      kind: 'variable' as const,
+      scope: v.scope,
+      line: v.line,
+      character: v.character,
+      uri: v.uri,
+    }));
+
+    this.documents.set(uri, {
+      document,
+      tree: newTree,
       threads,
       labels,
       variables,
@@ -51,6 +162,10 @@ export class DocumentManager {
    * Remove closed document
    */
   closeDocument(uri: string): void {
+    const info = this.documents.get(uri);
+    if (info?.tree) {
+      info.tree.delete();
+    }
     this.documents.delete(uri);
   }
 
@@ -59,6 +174,13 @@ export class DocumentManager {
    */
   getDocument(uri: string): TextDocument | undefined {
     return this.documents.get(uri)?.document;
+  }
+
+  /**
+   * Get the syntax tree for a document (if tree-sitter is enabled)
+   */
+  getTree(uri: string): Parser.Tree | null {
+    return this.documents.get(uri)?.tree ?? null;
   }
 
   /**
@@ -80,6 +202,27 @@ export class DocumentManager {
     }
 
     return undefined;
+  }
+
+  /**
+   * Get threads for a specific document
+   */
+  getThreads(uri: string): ThreadDefinition[] {
+    return this.documents.get(uri)?.threads ?? [];
+  }
+
+  /**
+   * Get labels for a specific document
+   */
+  getLabels(uri: string): SymbolInfo[] {
+    return this.documents.get(uri)?.labels ?? [];
+  }
+
+  /**
+   * Get variables for a specific document
+   */
+  getVariables(uri: string): SymbolInfo[] {
+    return this.documents.get(uri)?.variables ?? [];
   }
 
   /**
@@ -180,10 +323,13 @@ export class DocumentManager {
     return symbols.slice(0, 100);
   }
 
+  // ==================== FALLBACK REGEX PARSERS ====================
+  // These are used when tree-sitter is not initialized
+
   /**
-   * Parse thread definitions from text
+   * Parse thread definitions from text (regex fallback)
    */
-  private parseThreads(text: string, uri: string): ThreadDefinition[] {
+  private parseThreadsRegex(text: string, uri: string): ThreadDefinition[] {
     const threads: ThreadDefinition[] = [];
     const lines = text.split('\n');
 
@@ -221,9 +367,9 @@ export class DocumentManager {
   }
 
   /**
-   * Parse label definitions (for goto)
+   * Parse label definitions (regex fallback)
    */
-  private parseLabels(text: string, uri: string): SymbolInfo[] {
+  private parseLabelsRegex(text: string, uri: string): SymbolInfo[] {
     const labels: SymbolInfo[] = [];
     const lines = text.split('\n');
 
@@ -268,9 +414,9 @@ export class DocumentManager {
   }
 
   /**
-   * Parse variable definitions
+   * Parse variable definitions (regex fallback)
    */
-  private parseVariables(text: string, uri: string): SymbolInfo[] {
+  private parseVariablesRegex(text: string, uri: string): SymbolInfo[] {
     const variables: SymbolInfo[] = [];
     const lines = text.split('\n');
 

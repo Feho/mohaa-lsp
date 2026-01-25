@@ -42,3 +42,18 @@ export interface ThreadDefinition {
   character: number;
   uri: string;
 }
+
+export interface LabelDefinition {
+  name: string;
+  line: number;
+  character: number;
+  uri: string;
+}
+
+export interface VariableDefinition {
+  name: string;
+  scope: string;
+  line: number;
+  character: number;
+  uri: string;
+}

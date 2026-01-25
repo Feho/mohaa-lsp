@@ -1,5 +1,8 @@
 /**
  * Completion provider for Morpheus Script
+ * 
+ * Provides context-aware completions using tree-sitter AST when available,
+ * with fallback to regex-based context detection.
  */
 
 import {
@@ -10,6 +13,7 @@ import {
   MarkupKind,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import Parser from 'web-tree-sitter';
 import {
   FunctionDatabaseLoader,
   SCOPE_KEYWORDS,
@@ -21,9 +25,35 @@ import {
   ENTITY_PROPERTIES,
   LEVEL_PHASES,
 } from '../data/database';
+import {
+  isInitialized,
+  nodeAtPosition,
+  descendantAtPosition,
+  findAncestor,
+  positionToPoint,
+} from '../parser/treeSitterParser';
+
+/**
+ * Completion context information.
+ */
+interface CompletionContext {
+  type: 'scope' | 'property' | 'entity' | 'function' | 'levelphase' | 'general';
+  scope?: string;
+  prefix?: string;
+}
 
 export class CompletionProvider {
+  private documentManager: { getTree(uri: string): Parser.Tree | null } | null = null;
+
   constructor(private db: FunctionDatabaseLoader) {}
+
+  /**
+   * Set the document manager for tree-sitter access.
+   * This is optional - if not set, regex-based context detection is used.
+   */
+  setDocumentManager(manager: { getTree(uri: string): Parser.Tree | null }): void {
+    this.documentManager = manager;
+  }
 
   /**
    * Provide completions at the given position
@@ -36,8 +66,15 @@ export class CompletionProvider {
     const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
     const lineText = text.substring(lineStart, offset);
 
-    // Determine completion context
-    const context = this.getCompletionContext(lineText);
+    // Determine completion context using tree-sitter if available
+    let context: CompletionContext;
+    const tree = this.documentManager?.getTree(document.uri);
+
+    if (tree && isInitialized()) {
+      context = this.getCompletionContextFromTree(tree, position, lineText);
+    } else {
+      context = this.getCompletionContextFromRegex(lineText);
+    }
 
     switch (context.type) {
       case 'scope':
@@ -72,13 +109,104 @@ export class CompletionProvider {
   }
 
   /**
-   * Determine what type of completion to provide based on context
+   * Get completion context from tree-sitter AST.
+   * This is more accurate than regex as it understands the syntax structure.
    */
-  private getCompletionContext(lineText: string): {
-    type: 'scope' | 'property' | 'entity' | 'function' | 'levelphase' | 'general';
-    scope?: string;
-    prefix?: string;
-  } {
+  private getCompletionContextFromTree(
+    tree: Parser.Tree,
+    position: Position,
+    lineText: string
+  ): CompletionContext {
+    // Get the node at the cursor position
+    const point = positionToPoint(position);
+    
+    // Try to get the node just before the cursor
+    const adjustedPoint = {
+      row: point.row,
+      column: Math.max(0, point.column - 1),
+    };
+    
+    const node = tree.rootNode.descendantForPosition(adjustedPoint);
+    
+    // Walk up to find meaningful context
+    let current: Parser.SyntaxNode | null = node;
+    
+    while (current) {
+      // Check for scoped_variable (e.g., local.foo)
+      if (current.type === 'scoped_variable') {
+        const scopeNode = current.childForFieldName('scope');
+        const nameNode = current.childForFieldName('name');
+        
+        // Check if we're typing the name part (after the dot)
+        if (scopeNode && point.column > scopeNode.endPosition.column) {
+          return {
+            type: 'property',
+            scope: scopeNode.text.toLowerCase(),
+            prefix: nameNode?.text || '',
+          };
+        }
+      }
+      
+      // Check for scope keyword followed by dot
+      if (current.type === 'scope_keyword') {
+        // If there's a dot after the scope keyword in the line, we're typing a property
+        const scopeText = current.text;
+        if (lineText.endsWith('.') || lineText.match(new RegExp(`${scopeText}\\.\\s*\\w*$`, 'i'))) {
+          return {
+            type: 'property',
+            scope: scopeText.toLowerCase(),
+            prefix: '',
+          };
+        }
+        return { type: 'scope' };
+      }
+      
+      // Check for entity_reference (e.g., $foo)
+      if (current.type === 'entity_reference') {
+        return { type: 'entity' };
+      }
+      
+      // Check for call_expression - particularly for waittill
+      if (current.type === 'call_expression') {
+        const funcNode = current.childForFieldName('function');
+        if (funcNode) {
+          const funcName = funcNode.text.toLowerCase();
+          if (funcName === 'waittill' || funcName === 'waittillframeend') {
+            // Check if cursor is in the arguments area
+            const argsNode = current.childForFieldName('arguments');
+            if (!argsNode || point.column > funcNode.endPosition.column) {
+              return { type: 'levelphase' };
+            }
+          }
+        }
+      }
+      
+      // Check if we're typing an identifier that could be a function call
+      if (current.type === 'identifier') {
+        // Check if this is a function name in a call expression
+        const parent = current.parent;
+        if (parent?.type === 'call_expression') {
+          const funcNode = parent.childForFieldName('function');
+          if (funcNode?.id === current.id) {
+            return { type: 'function', prefix: current.text };
+          }
+        }
+        // Otherwise it could be completing any identifier
+        return { type: 'function', prefix: current.text };
+      }
+      
+      current = current.parent;
+    }
+    
+    // Fall back to regex for edge cases (e.g., empty line, just typed '$')
+    return this.getCompletionContextFromRegex(lineText);
+  }
+
+  /**
+   * Determine what type of completion to provide based on regex patterns.
+   * This is the fallback when tree-sitter is not available.
+   */
+  private getCompletionContextFromRegex(lineText: string): CompletionContext {
     // Check for scope.property pattern
     const scopePropertyMatch = lineText.match(/(local|level|game|group|parm|self|owner)\.\s*(\w*)$/i);
     if (scopePropertyMatch) {

@@ -17,10 +17,12 @@
     "prebuilds/**",
     "bindings/node/*",
     "queries/*",
-    "src/**"
+    "src/**",
+    "tree-sitter-morpheus.wasm"
   ],
   "scripts": {
     "build": "tree-sitter generate && node-gyp build",
+    "build:wasm": "tree-sitter build --wasm -o tree-sitter-morpheus.wasm",
     "generate": "tree-sitter generate",
     "test": "tree-sitter test",
     "parse": "tree-sitter parse",

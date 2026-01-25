@@ -1,5 +1,8 @@
 /**
  * Hover provider for Morpheus Script
+ * 
+ * Provides hover information for functions, keywords, and properties.
+ * Uses tree-sitter for accurate word range detection when available.
  */
 
 import {
@@ -9,6 +12,7 @@ import {
   Range,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import Parser from 'web-tree-sitter';
 import {
   FunctionDatabaseLoader,
   SCOPE_KEYWORDS,
@@ -18,19 +22,55 @@ import {
   PARM_PROPERTIES,
   ENTITY_PROPERTIES,
 } from '../data/database';
+import {
+  isInitialized,
+  nodeToRange,
+  positionToPoint,
+} from '../parser/treeSitterParser';
 
 export class HoverProvider {
+  private documentManager: { getTree(uri: string): Parser.Tree | null } | null = null;
+
   constructor(private db: FunctionDatabaseLoader) {}
+
+  /**
+   * Set the document manager for tree-sitter access.
+   */
+  setDocumentManager(manager: { getTree(uri: string): Parser.Tree | null }): void {
+    this.documentManager = manager;
+  }
 
   /**
    * Provide hover information at the given position
    */
   provideHover(document: TextDocument, position: Position): Hover | null {
-    const wordRange = this.getWordRangeAtPosition(document, position);
-    if (!wordRange) return null;
+    const tree = this.documentManager?.getTree(document.uri);
+    
+    let word: string | null = null;
+    let wordRange: Range | null = null;
+    let nodeType: string | null = null;
+    let scopeContext: string | null = null;
 
-    const word = document.getText(wordRange);
-    if (!word) return null;
+    // Try tree-sitter first for accurate range
+    if (tree && isInitialized()) {
+      const result = this.getWordFromTree(tree, position);
+      if (result) {
+        word = result.word;
+        wordRange = result.range;
+        nodeType = result.nodeType;
+        scopeContext = result.scope;
+      }
+    }
+
+    // Fall back to regex-based word detection
+    if (!word || !wordRange) {
+      wordRange = this.getWordRangeAtPosition(document, position);
+      if (wordRange) {
+        word = document.getText(wordRange);
+      }
+    }
+
+    if (!word || !wordRange) return null;
 
     // Check for function
     const funcDoc = this.db.getFunction(word);
@@ -44,8 +84,8 @@ export class HoverProvider {
       };
     }
 
-    // Check for scope keyword
-    if (SCOPE_KEYWORDS.includes(word.toLowerCase())) {
+    // Check for scope keyword (with context from tree-sitter)
+    if (nodeType === 'scope_keyword' || SCOPE_KEYWORDS.includes(word.toLowerCase())) {
       return {
         contents: {
           kind: MarkupKind.Markdown,
@@ -66,8 +106,8 @@ export class HoverProvider {
       };
     }
 
-    // Check for property
-    const propertyInfo = this.getPropertyInfo(word);
+    // Check for property (with scope context if available)
+    const propertyInfo = this.getPropertyInfo(word, scopeContext);
     if (propertyInfo) {
       return {
         contents: {
@@ -82,7 +122,84 @@ export class HoverProvider {
   }
 
   /**
-   * Get the word range at the given position
+   * Get word and range from tree-sitter AST.
+   */
+  private getWordFromTree(
+    tree: Parser.Tree,
+    position: Position
+  ): { word: string; range: Range; nodeType: string; scope: string | null } | null {
+    const point = positionToPoint(position);
+    
+    // Try to get the exact node at position
+    const node = tree.rootNode.namedDescendantForPosition(point);
+    if (!node) return null;
+
+    // If we're on an identifier, use it directly
+    if (node.type === 'identifier') {
+      // Check if this identifier is part of a scoped_variable
+      let scope: string | null = null;
+      const parent = node.parent;
+      if (parent?.type === 'scoped_variable') {
+        const scopeNode = parent.childForFieldName('scope');
+        if (scopeNode) {
+          scope = scopeNode.text.toLowerCase();
+        }
+      }
+
+      return {
+        word: node.text,
+        range: nodeToRange(node),
+        nodeType: node.type,
+        scope,
+      };
+    }
+
+    // If we're on a scope_keyword, return it
+    if (node.type === 'scope_keyword') {
+      return {
+        word: node.text,
+        range: nodeToRange(node),
+        nodeType: node.type,
+        scope: null,
+      };
+    }
+
+    // Try to find an identifier among descendants
+    const adjustedPoint = { row: point.row, column: Math.max(0, point.column - 1) };
+    const exactNode = tree.rootNode.descendantForPosition(adjustedPoint);
+    
+    if (exactNode?.type === 'identifier') {
+      let scope: string | null = null;
+      const parent = exactNode.parent;
+      if (parent?.type === 'scoped_variable') {
+        const scopeNode = parent.childForFieldName('scope');
+        if (scopeNode) {
+          scope = scopeNode.text.toLowerCase();
+        }
+      }
+
+      return {
+        word: exactNode.text,
+        range: nodeToRange(exactNode),
+        nodeType: exactNode.type,
+        scope,
+      };
+    }
+
+    if (exactNode?.type === 'scope_keyword') {
+      return {
+        word: exactNode.text,
+        range: nodeToRange(exactNode),
+        nodeType: exactNode.type,
+        scope: null,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Get the word range at the given position (regex fallback)
    */
   private getWordRangeAtPosition(document: TextDocument, position: Position): Range | null {
     const text = document.getText();
@@ -206,11 +323,25 @@ export class HoverProvider {
   }
 
   /**
-   * Get property information
+   * Get property information with optional scope context
    */
-  private getPropertyInfo(name: string): string | null {
+  private getPropertyInfo(name: string, scopeContext: string | null): string | null {
     const lowerName = name.toLowerCase();
 
+    // If we have scope context, provide more specific information
+    if (scopeContext === 'level' && LEVEL_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
+      return `**level.${name}**\n\nLevel property`;
+    }
+
+    if (scopeContext === 'game' && GAME_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
+      return `**game.${name}**\n\nGame property`;
+    }
+
+    if (scopeContext === 'parm' && PARM_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
+      return `**parm.${name}**\n\nParameter property`;
+    }
+
+    // Generic property lookup without scope context
     if (LEVEL_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
       return `**${name}**\n\nLevel property (use with \`level.${name}\`)`;
     }
