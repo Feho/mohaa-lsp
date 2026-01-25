@@ -11,6 +11,12 @@ import {
   ServerOptions,
   TransportKind,
   State,
+  ErrorAction,
+  CloseAction,
+  RevealOutputChannelOn,
+  Message,
+  ErrorHandlerResult,
+  CloseHandlerResult,
 } from 'vscode-languageclient/node';
 
 let client: LanguageClient | undefined;
@@ -56,6 +62,34 @@ export async function activate(context: ExtensionContext): Promise<void> {
     },
     outputChannel,
     traceOutputChannel: outputChannel,
+    revealOutputChannelOn: RevealOutputChannelOn.Warn,
+    errorHandler: {
+      error(
+        error: Error,
+        _message: Message | undefined,
+        count: number
+      ): ErrorHandlerResult {
+        outputChannel.appendLine(`Error [${count}]: ${error.message}`);
+
+        if (count < 3) {
+          // Allow a few errors before taking action
+          return { action: ErrorAction.Continue };
+        }
+
+        // After 3 errors, show warning and shutdown
+        window.showWarningMessage(
+          'Morpheus Language Server encountered multiple errors. Restarting...'
+        );
+        return { action: ErrorAction.Shutdown };
+      },
+
+      closed(): CloseHandlerResult {
+        outputChannel.appendLine('Connection to server closed');
+
+        // Automatically attempt restart
+        return { action: CloseAction.Restart };
+      },
+    },
   };
 
   // Create and start the client
@@ -66,12 +100,21 @@ export async function activate(context: ExtensionContext): Promise<void> {
     clientOptions
   );
 
-  // Track state changes for debugging
+  // Track state changes for debugging and user notification
   client.onDidChangeState((event) => {
-    if (event.newState === State.Stopped) {
-      outputChannel.appendLine('Language server stopped');
-    } else if (event.newState === State.Running) {
-      outputChannel.appendLine('Language server started');
+    switch (event.newState) {
+      case State.Stopped:
+        outputChannel.appendLine('Server stopped');
+        window.showWarningMessage(
+          'Morpheus Language Server stopped. Some features may be unavailable.'
+        );
+        break;
+      case State.Starting:
+        outputChannel.appendLine('Server starting...');
+        break;
+      case State.Running:
+        outputChannel.appendLine('Server running');
+        break;
     }
   });
 
