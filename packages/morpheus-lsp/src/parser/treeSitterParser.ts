@@ -32,8 +32,20 @@ export async function initParser(): Promise<void> {
 
   // Load the WASM file from the dist directory
   // The WASM is copied to dist/ root by the build script
-  const packageRoot = __dirname.replace(/[\/\\](src|dist)[\/\\].*$/, '');
-  const wasmPath = path.join(packageRoot, 'dist', 'tree-sitter-morpheus.wasm');
+  // __dirname will be either:
+  //   - .../morpheus-lsp/src/parser (when running tests via ts-node/vitest)
+  //   - .../morpheus-lsp/dist/parser (when running compiled JS)
+  let wasmPath: string;
+  
+  if (__dirname.includes('/src/') || __dirname.endsWith('/src')) {
+    // Running from source (e.g., vitest) - WASM is in dist/
+    const packageRoot = __dirname.replace(/\/src\/.*$/, '').replace(/\/src$/, '');
+    wasmPath = path.join(packageRoot, 'dist', 'tree-sitter-morpheus.wasm');
+  } else {
+    // Running from dist - WASM is in dist/ (same level as dist/parser)
+    const distDir = __dirname.replace(/\/parser$/, '');
+    wasmPath = path.join(distDir, 'tree-sitter-morpheus.wasm');
+  }
   
   language = await TreeSitter.Language.load(wasmPath);
   parser.setLanguage(language);

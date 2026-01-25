@@ -9,23 +9,15 @@ import { getLanguage } from './treeSitterParser';
 import { ThreadDefinition, LabelDefinition, VariableDefinition, SymbolInfo } from '../data/types';
 
 // Query strings - will be compiled into Query objects on first use
-// Note: Due to grammar ambiguities, threads may parse as thread_definition 
-// (when body is just 'end') or labeled_statement (when there's a body).
-// We query both and filter at extraction time.
+// Threads are always thread_definition nodes with a thread_body
 const THREAD_QUERY_SOURCE = `
-[
-  (thread_definition
-    name: (identifier) @name
-    parameters: (parameter_list)? @params
-  ) @thread
-  
-  (labeled_statement
-    label: (identifier) @name
-  ) @labeled
-]
+(thread_definition
+  name: (identifier) @name
+  parameters: (parameter_list)? @params
+) @thread
 `;
 
-// Labels inside threads - we'll filter to exclude top-level labeled_statements
+// Labels inside threads (labeled_statement nodes inside thread_body)
 const LABEL_QUERY_SOURCE = `
 (labeled_statement
   label: (identifier) @label
@@ -114,8 +106,7 @@ function getGotoQuery(): Parser.Query {
 
 /**
  * Extract all thread definitions from a syntax tree.
- * Handles both thread_definition nodes and top-level labeled_statement nodes
- * (which represent threads due to grammar ambiguities).
+ * Threads are parsed as thread_definition nodes with a thread_body.
  */
 export function findThreads(tree: Parser.Tree, uri: string): ThreadDefinition[] {
   const query = getThreadQuery();
@@ -125,20 +116,10 @@ export function findThreads(tree: Parser.Tree, uri: string): ThreadDefinition[] 
 
   for (const match of matches) {
     const threadNode = match.captures.find(c => c.name === 'thread')?.node;
-    const labeledNode = match.captures.find(c => c.name === 'labeled')?.node;
     const nameNode = match.captures.find(c => c.name === 'name')?.node;
     const paramsNode = match.captures.find(c => c.name === 'params')?.node;
 
-    if (!nameNode) continue;
-    
-    // Determine if this is a thread definition
-    const node = threadNode || labeledNode;
-    if (!node) continue;
-    
-    // For labeled_statement, only consider it a thread if it's a direct child of source_file
-    if (labeledNode && labeledNode.parent?.type !== 'source_file') {
-      continue;
-    }
+    if (!nameNode || !threadNode) continue;
     
     // Avoid duplicates
     if (seenNames.has(nameNode.text)) continue;
@@ -171,7 +152,7 @@ export function findThreads(tree: Parser.Tree, uri: string): ThreadDefinition[] 
 
 /**
  * Extract all labeled statements from a syntax tree.
- * Only returns labels that are NOT at the top level (those are threads).
+ * Labels are inside thread bodies (goto targets).
  */
 export function findLabels(tree: Parser.Tree, uri: string): LabelDefinition[] {
   const query = getLabelQuery();
@@ -180,13 +161,7 @@ export function findLabels(tree: Parser.Tree, uri: string): LabelDefinition[] {
 
   for (const match of matches) {
     const labelNode = match.captures.find(c => c.name === 'label')?.node;
-    const stmtNode = match.captures.find(c => c.name === 'stmt')?.node;
-    if (!labelNode || !stmtNode) continue;
-
-    // Skip if this is a top-level labeled_statement (those are threads)
-    if (stmtNode.parent?.type === 'source_file') {
-      continue;
-    }
+    if (!labelNode) continue;
 
     labels.push({
       name: labelNode.text,

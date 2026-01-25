@@ -24,8 +24,8 @@ import {
 } from './queries';
 
 // Sample Morpheus script for testing
-// Note: Due to grammar ambiguities, threads with bodies may parse as labeled_statement
-// rather than thread_definition. The queries handle both cases.
+// With the fixed grammar, threads are always thread_definition nodes
+// and labels inside threads are correctly nested as labeled_statement nodes.
 const SAMPLE_SCRIPT = `
 // Main thread
 main:
@@ -42,8 +42,9 @@ end
 // Health monitoring thread  
 watchHealth local.entity:
     while (local.entity.health > 0)
+    {
         waitframe
-    end
+    }
     
     thread onDeath local.entity
 end
@@ -114,26 +115,37 @@ describe('Tree-sitter Parser', () => {
   });
 
   describe('findThreads', () => {
-    it('should find thread definitions from top-level labels', () => {
+    it('should find thread definitions', () => {
       const tree = parseDocument(SAMPLE_SCRIPT);
       const threads = findThreads(tree, 'test.scr');
 
-      // Should find main as a thread (top-level labeled_statement)
+      // Should find main as a thread_definition
       const main = threads.find(t => t.name === 'main');
       expect(main).toBeDefined();
 
-      // Check that we found at least the main thread
-      expect(threads.length).toBeGreaterThanOrEqual(1);
+      // Should find multiple threads
+      expect(threads.length).toBeGreaterThanOrEqual(3);
+      expect(threads.find(t => t.name === 'watchHealth')).toBeDefined();
+      expect(threads.find(t => t.name === 'onDeath')).toBeDefined();
     });
 
     it('should find simple thread definitions', () => {
-      // Simple case: thread with just 'end' parses correctly as thread_definition
       const simpleScript = `mythread:\nend`;
       const tree = parseDocument(simpleScript);
       const threads = findThreads(tree, 'test.scr');
 
       expect(threads.length).toBe(1);
       expect(threads[0].name).toBe('mythread');
+    });
+
+    it('should extract thread parameters', () => {
+      const script = `mythread local.param1 local.param2:\n  println local.param1\nend`;
+      const tree = parseDocument(script);
+      const threads = findThreads(tree, 'test.scr');
+
+      expect(threads.length).toBe(1);
+      expect(threads[0].parameters).toContain('param1');
+      expect(threads[0].parameters).toContain('param2');
     });
 
     it('should include line and character positions', () => {
@@ -148,24 +160,32 @@ describe('Tree-sitter Parser', () => {
   });
 
   describe('findLabels', () => {
-    it('should find labels that are not at top level', () => {
-      // Note: Due to grammar issues, labels inside thread bodies may not be found
-      // This test verifies the basic query mechanism works
+    it('should find labels inside thread bodies', () => {
       const tree = parseDocument(SCRIPT_WITH_LABELS);
       const labels = findLabels(tree, 'test.scr');
 
-      // The grammar may not correctly nest the label inside the thread
-      // so we just verify no top-level labels are returned as labels
-      // (mythread should not appear as a label)
-      expect(labels.find(l => l.name === 'mythread')).toBeUndefined();
+      // loop_start is a label inside the thread body
+      const loopStart = labels.find(l => l.name === 'loop_start');
+      expect(loopStart).toBeDefined();
     });
 
-    it('should not include thread definitions (top-level labels) as labels', () => {
+    it('should find cleanup label in onDeath thread', () => {
       const tree = parseDocument(SAMPLE_SCRIPT);
       const labels = findLabels(tree, 'test.scr');
 
-      // main is a top-level label (thread), should not be in labels
-      expect(labels.find(l => l.name === 'main')).toBeUndefined();
+      // cleanup is a label inside the onDeath thread
+      const cleanup = labels.find(l => l.name === 'cleanup');
+      expect(cleanup).toBeDefined();
+    });
+
+    it('should not find thread names as labels', () => {
+      // Thread definitions are parsed as thread_definition, not labeled_statement
+      const script = `mythread:\n  println "test"\nend`;
+      const tree = parseDocument(script);
+      const labels = findLabels(tree, 'test.scr');
+
+      // mythread is a thread name, not a label
+      expect(labels.find(l => l.name === 'mythread')).toBeUndefined();
     });
   });
 

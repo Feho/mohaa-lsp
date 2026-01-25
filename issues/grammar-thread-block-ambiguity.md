@@ -1,5 +1,15 @@
 # Fix Grammar Ambiguity Between Threads and Labels
 
+## Status: COMPLETED
+
+Option B has been implemented and all tests pass. The grammar now correctly:
+- Parses threads as `thread_definition` nodes with `thread_body` containing statements and `end_statement`
+- Parses labels inside threads as `labeled_statement` nodes (no longer at top level)
+- Extracts thread parameters correctly
+- Handles `end` with optional return values without being greedy across lines
+
+---
+
 ## Problem
 
 The tree-sitter grammar has a fundamental ambiguity between `thread_definition` and `labeled_statement`. Both constructs start with `identifier:`, making it impossible for tree-sitter to distinguish them without additional context.
@@ -150,12 +160,14 @@ labeled_statement: $ => prec.right(seq(
 
 After fixing, these should all parse correctly:
 
-- [ ] Simple thread: `main:\nend`
-- [ ] Thread with body: `main:\n  println "test"\nend`
-- [ ] Thread with parameters: `helper local.x local.y:\n  println local.x\nend`
-- [ ] Thread with label inside: `main:\n  goto loop\nloop:\n  println "loop"\nend`
-- [ ] Multiple threads in one file
-- [ ] Nested control structures inside threads
+- [x] Simple thread: `main:\nend`
+- [x] Thread with body: `main:\n  println "test"\nend`
+- [x] Thread with parameters: `helper local.x local.y:\n  println local.x\nend`
+- [x] Thread with label inside: `main:\n  goto loop\nloop:\n  println "loop"\nend`
+- [x] Multiple threads in one file
+- [x] Nested control structures inside threads
+
+All tests pass with the native tree-sitter parser (`pnpm run test` in tree-sitter-morpheus).
 
 ## Files to modify
 

@@ -30,27 +30,53 @@ module.exports = grammar({
     [$.ternary_expression, $.argument_list],
     [$.argument_list, $.const_array],
     [$.parameter_list, $.primary_expression],
-    [$.labeled_statement, $.block],
     [$.call_expression],
     [$.ternary_expression, $.const_array],
     [$.const_array],
+    [$.end_statement],
   ],
 
   rules: {
-    // Entry point - a script file
-    source_file: $ => repeat($._statement),
+    // Entry point - a script file contains thread definitions
+    source_file: $ => repeat($.thread_definition),
+
+    // ==================== THREAD STRUCTURE ====================
+
+    // Thread definition: mythread local.param1 local.param2:
+    //   body statements
+    // end
+    thread_definition: $ => seq(
+      field('name', $.identifier),
+      optional(field('parameters', $.parameter_list)),
+      ':',
+      field('body', $.thread_body),
+    ),
+
+    parameter_list: $ => repeat1($.scoped_variable),
+
+    // Thread body contains statements and ends with 'end'
+    thread_body: $ => seq(
+      repeat($._block_statement),
+      $.end_statement,
+    ),
+
+    // End statement terminates a thread (optionally with return value on same line)
+    // Use prec(-1) to prefer other interpretations when there's ambiguity
+    end_statement: $ => seq(
+      'end',
+      optional(prec(-1, field('value', $._expression))),
+    ),
 
     // ==================== STATEMENTS ====================
 
-    _statement: $ => choice(
-      $.thread_definition,
+    // Statements that can appear inside a thread body (not 'end')
+    _block_statement: $ => choice(
       $.labeled_statement,
       $.if_statement,
       $.for_statement,
       $.while_statement,
       $.switch_statement,
       $.try_statement,
-      $.return_statement,
       $.break_statement,
       $.continue_statement,
       $.goto_statement,
@@ -58,25 +84,15 @@ module.exports = grammar({
       $.empty_statement,
     ),
 
-    // Thread definition: mythread local.param1 local.param2:
-    thread_definition: $ => seq(
-      field('name', $.identifier),
-      optional(field('parameters', $.parameter_list)),
-      ':',
-      field('body', $.block),
-    ),
-
-    parameter_list: $ => repeat1($.scoped_variable),
-
-    // Labeled statement for goto targets - use prec.right to consume optional statement
+    // Labeled statement for goto targets inside threads
     labeled_statement: $ => prec.right(seq(
       field('label', $.identifier),
       ':',
-      optional($._statement),
+      optional($._block_statement),
     )),
 
-    // Block of statements (implicit via end or next thread)
-    block: $ => prec.left(repeat1($._statement)),
+    // Block of statements for control flow (if/for/while)
+    block: $ => prec.left(repeat1($._block_statement)),
 
     // Empty statement
     empty_statement: $ => ';',
@@ -99,8 +115,8 @@ module.exports = grammar({
     )),
 
     block_or_statement: $ => choice(
-      seq('{', repeat($._statement), '}'),
-      $._statement,
+      seq('{', repeat($._block_statement), '}'),
+      $._block_statement,
     ),
 
     // for loop
@@ -137,13 +153,13 @@ module.exports = grammar({
       'case',
       field('value', $._expression),
       ':',
-      repeat($._statement),
+      repeat($._block_statement),
     ),
 
     default_case: $ => seq(
       'default',
       ':',
-      repeat($._statement),
+      repeat($._block_statement),
     ),
 
     // try/catch statement
@@ -153,12 +169,6 @@ module.exports = grammar({
       'catch',
       field('handler', $.block_or_statement),
     ),
-
-    // return/end - use prec.right to greedily consume optional return value
-    return_statement: $ => prec.right(seq(
-      'end',
-      optional(field('value', $._expression)),
-    )),
 
     break_statement: $ => 'break',
     continue_statement: $ => 'continue',
