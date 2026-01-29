@@ -1,15 +1,37 @@
 # Morpheus Script LSP
 
-Language Server Protocol implementation for MOHAA Morpheus Script (.scr files).
+Full-featured Language Server Protocol implementation for MOHAA Morpheus Script (.scr files), with integrated debugging support for OpenMOHAA.
 
 ## Features
 
+### Language Server
 - **Completions**: 1,279 built-in functions + 94 Reborn/NightFall functions
 - **Hover**: Function documentation with syntax, description, examples
-- **Go to Definition**: Thread and label navigation
-- **Find References**: Variable and thread usage
+- **Go to Definition**: Thread, label, and variable navigation (including cross-file)
+- **Find References**: Variable and thread usage tracking
 - **Document Symbols**: Thread and label outline
-- **Diagnostics**: Basic syntax validation
+- **Workspace Symbols**: Search symbols across all files
+- **Diagnostics**: Tree-sitter syntax validation + semantic checks
+- **Formatting**: AST-aware code formatting
+
+### Debugging (DAP)
+- **Attach to OpenMOHAA**: Connect to running game's debug server
+- **Breakpoints**: Set, remove, and manage breakpoints
+- **Call Stack**: View execution stack when paused
+- **Variables**: Inspect local and level variables
+- **Path Translation**: Automatic workspace ↔ game path conversion
+
+### External Validation
+- **Morfuse Integration**: Validate scripts with the actual game compiler
+- **Task Provider**: Auto-detected validation tasks
+- **Problem Matcher**: Parse morfuse errors into VS Code problems
+
+### Game Version Support
+- **AA**: Allied Assault (base game)
+- **SH**: Spearhead expansion
+- **BT**: Breakthrough expansion
+- **Reborn**: Reborn community patch
+- **NightFall**: NightFall community patch
 
 ## Packages
 
@@ -140,10 +162,62 @@ mohaa-lsp/
     └── verify-scr.sh           # Parser verification
 ```
 
+## Configuration
+
+### VS Code Settings
+
+```json
+{
+  "morpheus.gameVersion": ["AA", "SH", "BT"],
+  "morpheus.validation.mfusePath": "/path/to/mfuse_exec",
+  "morpheus.validation.trigger": "onSave",
+  "morpheus.formatting.enable": true,
+  "morpheus.trace.server": "off"
+}
+```
+
+### Debugging
+
+Create a `.vscode/launch.json`:
+
+```json
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "openmohaa",
+      "request": "attach",
+      "name": "Attach to OpenMOHAA",
+      "port": 4711,
+      "host": "localhost"
+    }
+  ]
+}
+```
+
+Then:
+1. Start OpenMOHAA with debug mode enabled
+2. Press F5 in VS Code to attach
+3. Set breakpoints in your .scr files
+4. Run the script in-game - execution will pause at breakpoints
+
+### Morfuse Validation Tasks
+
+The extension auto-detects morfuse tasks when `morpheus.validation.mfusePath` is configured. Run with:
+
+- `Ctrl+Shift+B` → Select "Morfuse: Validate Project"
+- Or: Terminal → Run Task → morfuse
+
 ## License
 
 MIT
 
 ## Credits
 
-Function documentation sourced from [SublimeMOHAA](https://github.com/eduzappa18/SublimeMOHAA).
+- Tree-sitter grammar and initial LSP by [Feho](https://github.com/Feho/mohaa-lsp)
+- DAP debugger and morfuse integration from [morpheus-vscode](https://github.com/elgansayer/morpheus-script-vscode-extension)
+- Function documentation sourced from [SublimeMOHAA](https://github.com/eduzappa18/SublimeMOHAA)
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for planned features and development timeline.

@@ -1,0 +1,79 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Morfuse: Validate Current File",
+            "type": "shell",
+            "command": "${config:morpheus.validation.mfusePath}",
+            "args": [
+                "-d", "${fileDirname}",
+                "-s", "${fileBasename}"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": {
+                "owner": "morfuse",
+                "fileLocation": ["relative", "${fileDirname}"],
+                "pattern": [
+                    {
+                        "regexp": "^([EW]): \\((.+), (\\d+)\\):$",
+                        "severity": 1,
+                        "file": 2,
+                        "location": 3
+                    },
+                    {
+                        "regexp": "^[EW]: .+$"
+                    },
+                    {
+                        "regexp": "^[EW]: \\^$"
+                    },
+                    {
+                        "regexp": "^[EW]: \\^~\\^~\\^ .+: (.+)$",
+                        "message": 1
+                    }
+                ]
+            }
+        },
+        {
+            "label": "Morfuse: Validate Project",
+            "type": "shell",
+            "command": "${config:morpheus.validation.mfusePath}",
+            "args": [
+                "-d", "${workspaceFolder}"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": {
+                "owner": "morfuse",
+                "fileLocation": ["relative", "${workspaceFolder}"],
+                "pattern": [
+                    {
+                        "regexp": "^([EW]): \\((.+), (\\d+)\\):$",
+                        "severity": 1,
+                        "file": 2,
+                        "location": 3
+                    },
+                    {
+                        "regexp": "^[EW]: .+$"
+                    },
+                    {
+                        "regexp": "^[EW]: \\^$"
+                    },
+                    {
+                        "regexp": "^[EW]: \\^~\\^~\\^ .+: (.+)$",
+                        "message": 1
+                    }
+                ]
+            }
+        }
+    ]
+}

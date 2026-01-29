@@ -1,10 +1,26 @@
 /**
  * VS Code extension for Morpheus Script language support
+ * 
+ * Features:
+ * - Language Server Protocol (LSP) for completions, hover, diagnostics
+ * - Debug Adapter Protocol (DAP) for OpenMOHAA script debugging
+ * - Morpheus script formatting
  */
 
 import * as path from 'path';
 import { existsSync } from 'fs';
-import { ExtensionContext, workspace, window } from 'vscode';
+import {
+  ExtensionContext,
+  workspace,
+  window,
+  debug,
+  tasks,
+  DebugAdapterDescriptorFactory,
+  DebugSession,
+  DebugAdapterDescriptor,
+  DebugAdapterInlineImplementation,
+  Disposable,
+} from 'vscode';
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -18,6 +34,8 @@ import {
   ErrorHandlerResult,
   CloseHandlerResult,
 } from 'vscode-languageclient/node';
+import { MorpheusDebugAdapter } from './debugAdapter';
+import { MorfuseTaskProvider } from './taskProvider';
 
 let client: LanguageClient | undefined;
 
@@ -131,6 +149,21 @@ export async function activate(context: ExtensionContext): Promise<void> {
     outputChannel.appendLine(`Activation error: ${message}`);
     // Don't re-throw - allow extension to remain loaded for syntax highlighting
   }
+
+  // Register the debug adapter factory for OpenMOHAA debugging
+  const debugAdapterFactory = new MorpheusDebugAdapterDescriptorFactory();
+  context.subscriptions.push(
+    debug.registerDebugAdapterDescriptorFactory('openmohaa', debugAdapterFactory)
+  );
+  context.subscriptions.push(debugAdapterFactory);
+
+  // Register the task provider for morfuse validation
+  const taskProvider = new MorfuseTaskProvider();
+  context.subscriptions.push(
+    tasks.registerTaskProvider(MorfuseTaskProvider.TaskType, taskProvider)
+  );
+
+  outputChannel.appendLine('Morpheus extension activated with DAP and Task support');
 }
 
 export async function deactivate(): Promise<void> {
@@ -141,5 +174,38 @@ export async function deactivate(): Promise<void> {
       console.error('Error stopping Morpheus Language Server:', error);
     }
     client = undefined;
+  }
+}
+
+/**
+ * Factory for creating debug adapter instances
+ * Handles connection to OpenMOHAA's built-in DAP server
+ */
+class MorpheusDebugAdapterDescriptorFactory
+  implements DebugAdapterDescriptorFactory, Disposable
+{
+  createDebugAdapterDescriptor(session: DebugSession): DebugAdapterDescriptor {
+    const port = session.configuration.port || 4711;
+    const host = session.configuration.host || 'localhost';
+
+    // Determine workspace root for path translation
+    let rootPath = '';
+    if (session.workspaceFolder) {
+      rootPath = session.workspaceFolder.uri.fsPath;
+    } else if (workspace.workspaceFolders && workspace.workspaceFolders.length > 0) {
+      rootPath = workspace.workspaceFolders[0].uri.fsPath;
+    }
+
+    console.log(
+      `Connecting to OpenMOHAA debugger at ${host}:${port} with workspace root: ${rootPath}`
+    );
+
+    return new DebugAdapterInlineImplementation(
+      new MorpheusDebugAdapter(host, port, rootPath)
+    );
+  }
+
+  dispose(): void {
+    // Cleanup if needed
   }
 }
