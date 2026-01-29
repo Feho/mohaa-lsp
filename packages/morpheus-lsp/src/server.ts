@@ -28,7 +28,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import Parser from 'web-tree-sitter';
 
-import { functionDb } from './data/database';
+import { functionDb, eventDb } from './data/database';
 import { CompletionProvider } from './capabilities/completion';
 import { HoverProvider } from './capabilities/hover';
 import { DefinitionProvider } from './capabilities/definition';
@@ -61,6 +61,9 @@ let formattingEnabled = true;
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   // Load function database
   await functionDb.load();
+  
+  // Load event database
+  await eventDb.load();
 
   // Initialize tree-sitter parser
   try {
@@ -73,8 +76,10 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   // Initialize providers
   completionProvider = new CompletionProvider(functionDb);
   completionProvider.setDocumentManager(documentManager);
+  completionProvider.setEventDatabase(eventDb);
   hoverProvider = new HoverProvider(functionDb);
   hoverProvider.setDocumentManager(documentManager);
+  hoverProvider.setEventDatabase(eventDb);
   definitionProvider = new DefinitionProvider(documentManager);
   formattingProvider = new FormattingProvider();
   formattingProvider.setDocumentManager(documentManager);

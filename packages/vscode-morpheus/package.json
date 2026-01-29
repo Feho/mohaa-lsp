@@ -3,15 +3,19 @@
   "displayName": "Morpheus Script",
   "description": "Full language support for MOHAA Morpheus Script (.scr) - syntax highlighting, completions, hover docs, go-to-definition, debugging, formatting, and validation.",
   "version": "0.2.0",
-  "publisher": "Elgan",
+  "publisher": "Mohaa Community",
   "author": {
-    "name": "Elgan Sayer",
+    "name": "Mohaa Community",
     "url": "https://github.com/elgansayer"
   },
   "contributors": [
     {
       "name": "Feho",
       "url": "https://github.com/Feho"
+    },
+    {
+      "name": "Elgan",
+      "url": "https://github.com/elgansayer"
     }
   ],
   "license": "MIT",
