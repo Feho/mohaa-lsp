@@ -146,4 +146,4 @@ MIT
 
 ## Credits
 
-Function documentation sourced from [SublimeMOHAA](https://github.com/mohaa-community/SublimeMOHAA).
+Function documentation sourced from [SublimeMOHAA](https://github.com/eduzappa18/SublimeMOHAA).
