@@ -7,10 +7,14 @@ Full-featured Language Server Protocol implementation for MOHAA Morpheus Script 
 ### Language Server
 - **Completions**: 1,279 built-in functions + 94 Reborn/NightFall functions
 - **Hover**: Function documentation with syntax, description, examples
+- **Signature Help**: Parameter hints and active parameter highlighting as you type
 - **Go to Definition**: Thread, label, and variable navigation (including cross-file)
-- **Find References**: Variable and thread usage tracking
+- **Find References**: Variable and thread usage tracking across the workspace
+- **Rename**: Safe symbol renaming for variables, threads, and labels
 - **Document Symbols**: Thread and label outline
 - **Workspace Symbols**: Search symbols across all files
+- **Semantic Highlighting**: Rich syntax coloring distinguishing parameters, local variables, properties, and functions
+- **Code Actions**: Quick fixes for common issues (e.g., correcting `==` assignments, replacing deprecated functions)
 - **Diagnostics**: Tree-sitter syntax validation + semantic checks
 - **Formatting**: AST-aware code formatting
 

@@ -88,17 +88,15 @@ export class SignatureHelpProvider {
         // If cursor is ON child N, index is N.
         
         activeParameter = 0;
+        // console.log(`Args count: ${argsNode.namedChildren.length}`);
         for (let i = 0; i < argsNode.namedChildren.length; i++) {
           const child = argsNode.namedChildren[i];
           const childEnd = child.endPosition;
+          // console.log(`Child ${i} type: ${child.type} ends at ${childEnd.row}:${childEnd.column}`);
           
-          // Convert to VS Code positions for comparison
           if (position.line > childEnd.row || (position.line === childEnd.row && position.character > childEnd.column)) {
             activeParameter = i + 1;
           } else {
-            // Cursor is before or inside this child
-            // If it's inside, we are editing this param.
-            // If it's strictly before (in whitespace before), we are editing this param.
             break;
           }
         }

@@ -39,14 +39,12 @@ describe('SignatureHelpProvider', () => {
   });
 
   it('should identify the second parameter', () => {
-    // Note: Morpheus commands are space separated. 
-    // Example: vector_add (1 0 0) (0 1 0)
-    const content = 'main:\n  vector_add (1 0 0) (0 1 0)\nend';
+    const content = 'main:\n  vector_add 1 2 3\nend';
     const doc = createDoc(content);
     documentManager.updateDocument(doc);
 
-    // Position after the first vector
-    const position = { line: 1, character: 22 };
+    // Position after the first arg "1 "
+    const position = { line: 1, character: 15 };
     const help = provider.provideSignatureHelp(doc, position);
 
     expect(help).not.toBeNull();

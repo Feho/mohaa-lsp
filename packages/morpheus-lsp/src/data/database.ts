@@ -78,6 +78,23 @@ export const CONTROL_KEYWORDS = [
 export const STORAGE_TYPES = ['bool', 'entity', 'float', 'int', 'string'];
 
 /**
+ * Helper to find the correct data directory
+ */
+function getDataDir(): string {
+  // If we are in src/data, files are here
+  if (__dirname.endsWith('data') || __dirname.endsWith('data/')) {
+    return __dirname;
+  }
+  // Otherwise try the data subdirectory (for bundled/dist)
+  const subDir = path.join(__dirname, 'data');
+  if (fs.existsSync(subDir)) {
+    return subDir;
+  }
+  // Fallback
+  return __dirname;
+}
+
+/**
  * Loads and merges function databases
  */
 export class FunctionDatabaseLoader {
@@ -92,20 +109,24 @@ export class FunctionDatabaseLoader {
   async load(): Promise<void> {
     if (this.loaded) return;
 
-    const dataDir = path.join(__dirname, 'data');
+    const dataDir = getDataDir();
 
     try {
       const morpheusPath = path.join(dataDir, 'Morpheus.json');
-      const morpheusContent = fs.readFileSync(morpheusPath, 'utf-8');
-      this.morpheusDb = JSON.parse(morpheusContent);
+      if (fs.existsSync(morpheusPath)) {
+        const morpheusContent = fs.readFileSync(morpheusPath, 'utf-8');
+        this.morpheusDb = JSON.parse(morpheusContent);
+      }
     } catch (e) {
       console.error('Failed to load Morpheus.json:', e);
     }
 
     try {
       const rebornPath = path.join(dataDir, 'Reborn.json');
-      const rebornContent = fs.readFileSync(rebornPath, 'utf-8');
-      this.rebornDb = JSON.parse(rebornContent);
+      if (fs.existsSync(rebornPath)) {
+        const rebornContent = fs.readFileSync(rebornPath, 'utf-8');
+        this.rebornDb = JSON.parse(rebornContent);
+      }
     } catch (e) {
       console.error('Failed to load Reborn.json:', e);
     }
@@ -232,12 +253,14 @@ export class EventDatabaseLoader {
   async load(): Promise<void> {
     if (this.loaded) return;
 
-    const dataDir = path.join(__dirname, 'data');
+    const dataDir = getDataDir();
 
     try {
       const eventsPath = path.join(dataDir, 'Events.json');
-      const eventsContent = fs.readFileSync(eventsPath, 'utf-8');
-      this.eventsDb = JSON.parse(eventsContent);
+      if (fs.existsSync(eventsPath)) {
+        const eventsContent = fs.readFileSync(eventsPath, 'utf-8');
+        this.eventsDb = JSON.parse(eventsContent);
+      }
     } catch (e) {
       console.error('Failed to load Events.json:', e);
     }

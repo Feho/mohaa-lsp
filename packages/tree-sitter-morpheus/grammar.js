@@ -287,19 +287,33 @@ module.exports = grammar({
     )),
 
     // Function/method call: entity functionname arg1 arg2
-    call_expression: $ => prec.left(9, seq(
-      optional(field('target', choice(
-        $.scoped_variable,
-        $.entity_reference,
-        $.member_expression,
-        $.self_reference,
-        $.identifier,
-      ))),
-      field('function', $.identifier),
-      optional(field('arguments', $.argument_list)),
-    )),
+    call_expression: $ => choice(
+      // Function call with arguments
+      prec.left(15, seq(
+        optional(field('target', choice(
+          $.scoped_variable,
+          $.entity_reference,
+          $.member_expression,
+          $.self_reference,
+          $.identifier,
+        ))),
+        field('function', $.identifier),
+        field('arguments', $.argument_list),
+      )),
+      // Function call without arguments
+      prec.left(10, seq(
+        optional(field('target', choice(
+          $.scoped_variable,
+          $.entity_reference,
+          $.member_expression,
+          $.self_reference,
+          $.identifier,
+        ))),
+        field('function', $.identifier),
+      )),
+    ),
 
-    argument_list: $ => prec.left(repeat1($._expression)),
+    argument_list: $ => prec.right(20, repeat1($._expression)),
 
     // Member access: entity.property
     member_expression: $ => prec.left(10, seq(

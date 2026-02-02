@@ -9,7 +9,7 @@ Full-featured language support for Medal of Honor: Allied Assault Morpheus Scrip
 ### 🎯 IntelliSense
 - **Completions**: 1,279 built-in functions + 94 Reborn/NightFall community functions
 - **Hover Documentation**: Function syntax, descriptions, and examples
-- **Signature Help**: Parameter hints as you type
+- **Signature Help**: Parameter hints and active parameter highlighting as you type
 
 ### 🧭 Navigation
 - **Go to Definition**: Jump to thread/label definitions (Ctrl+Click or F12)
@@ -18,8 +18,10 @@ Full-featured language support for Medal of Honor: Allied Assault Morpheus Scrip
 - **Workspace Symbols**: Search threads across your entire project (Ctrl+T)
 
 ### ✨ Editing
-- **Syntax Highlighting**: Complete support for all Morpheus constructs
-- **Code Formatting**: AST-aware formatting with proper indentation
+- **Semantic Highlighting**: Rich, context-aware coloring that distinguishes parameters, local variables, properties, and functions
+- **Rename Symbol**: Safely rename variables, threads, and labels across your workspace (F2)
+- **Code Actions**: Quick fixes for common issues (e.g., fixing `==` assignments, replacing deprecated functions) (Ctrl+.)
+- **Code Formatting**: AST-aware formatting with proper indentation (Shift+Alt+F)
 - **Bracket Matching**: Auto-close brackets, parentheses, and quotes
 
 ### 🔍 Validation
@@ -96,6 +98,8 @@ For advanced validation with the morfuse compiler:
 |--------|--------------|-------|
 | Go to Definition | F12 or Ctrl+Click | F12 or Cmd+Click |
 | Find All References | Shift+F12 | Shift+F12 |
+| Rename Symbol | F2 | F2 |
+| Quick Fix (Code Action) | Ctrl+. | Cmd+. |
 | Go to Symbol | Ctrl+Shift+O | Cmd+Shift+O |
 | Workspace Symbols | Ctrl+T | Cmd+T |
 | Format Document | Shift+Alt+F | Shift+Option+F |

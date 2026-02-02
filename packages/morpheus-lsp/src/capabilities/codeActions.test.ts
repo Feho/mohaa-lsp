@@ -28,7 +28,7 @@ describe('CodeActionProvider', () => {
     });
 
     expect(actions.length).toBe(1);
-    expect(actions[0].title).toBe("Replace '==' with '=' ");
+    expect(actions[0].title).toBe("Replace '==' with '='");
     expect(actions[0].edit?.changes?.[doc.uri][0].newText).toBe('=');
   });
 
