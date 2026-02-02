@@ -3,7 +3,7 @@
   "displayName": "Morpheus Script",
   "description": "Full language support for MOHAA Morpheus Script (.scr) - syntax highlighting, completions, hover docs, go-to-definition, debugging, formatting, and validation.",
   "version": "0.2.0",
-  "publisher": "MohaaCommunity",
+  "publisher": "mohaa-community",
   "author": {
     "name": "Mohaa Community",
     "url": "https://github.com/elgansayer"
@@ -253,11 +253,11 @@
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && npm run copy-server",
-    "copy-server": "npm run build --prefix ../morpheus-lsp && mkdir -p dist/server && cp -r ../morpheus-lsp/dist/* dist/server/",
-    "watch": "npm run build -- --watch",
-    "package": "vsce package",
+    "vscode:prepublish": "pnpm run build",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && pnpm run copy-server",
+    "copy-server": "pnpm --filter morpheus-lsp build && mkdir -p dist/server && cp -r ../morpheus-lsp/dist/* dist/server/",
+    "watch": "pnpm run build -- --watch",
+    "package": "vsce package --no-dependencies",
     "publish": "vsce publish"
   },
   "dependencies": {
