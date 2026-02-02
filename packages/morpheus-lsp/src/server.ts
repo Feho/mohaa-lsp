@@ -32,6 +32,8 @@ import { functionDb, eventDb } from './data/database';
 import { CompletionProvider } from './capabilities/completion';
 import { HoverProvider } from './capabilities/hover';
 import { DefinitionProvider } from './capabilities/definition';
+import { SignatureHelpProvider } from './capabilities/signatureHelp';
+import { RenameProvider } from './capabilities/rename';
 import { FormattingProvider } from './capabilities/formatting';
 import { validateWithMfuse, MfuseValidatorConfig } from './capabilities/mfuseValidator';
 import { DocumentManager } from './parser/documentManager';
@@ -48,6 +50,8 @@ const documentManager = new DocumentManager();
 let completionProvider: CompletionProvider;
 let hoverProvider: HoverProvider;
 let definitionProvider: DefinitionProvider;
+let signatureHelpProvider: SignatureHelpProvider;
+let renameProvider: RenameProvider;
 let formattingProvider: FormattingProvider;
 
 // Configuration
@@ -81,6 +85,8 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   hoverProvider.setDocumentManager(documentManager);
   hoverProvider.setEventDatabase(eventDb);
   definitionProvider = new DefinitionProvider(documentManager);
+  signatureHelpProvider = new SignatureHelpProvider(functionDb, documentManager);
+  renameProvider = new RenameProvider(definitionProvider);
   formattingProvider = new FormattingProvider();
   formattingProvider.setDocumentManager(documentManager);
 
@@ -96,6 +102,10 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
       hoverProvider: true,
       definitionProvider: true,
       referencesProvider: true,
+      signatureHelpProvider: {
+        triggerCharacters: ['(', ',', ' '],
+      },
+      renameProvider: true,
       documentSymbolProvider: true,
       workspaceSymbolProvider: true,
       documentFormattingProvider: true,
@@ -162,6 +172,20 @@ connection.onReferences((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
   return definitionProvider.findReferences(document, params.position);
+});
+
+// Signature Help
+connection.onSignatureHelp((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return signatureHelpProvider.provideSignatureHelp(document, params.position);
+});
+
+// Rename
+connection.onRenameRequest((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return renameProvider.provideRenameEdits(document, params.position, params.newName);
 });
 
 // Document symbols
