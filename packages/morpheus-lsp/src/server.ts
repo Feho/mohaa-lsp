@@ -34,6 +34,8 @@ import { HoverProvider } from './capabilities/hover';
 import { DefinitionProvider } from './capabilities/definition';
 import { SignatureHelpProvider } from './capabilities/signatureHelp';
 import { RenameProvider } from './capabilities/rename';
+import { SemanticTokensProvider, semanticTokensLegend } from './capabilities/semanticTokens';
+import { CodeActionProvider } from './capabilities/codeActions';
 import { FormattingProvider } from './capabilities/formatting';
 import { validateWithMfuse, MfuseValidatorConfig } from './capabilities/mfuseValidator';
 import { DocumentManager } from './parser/documentManager';
@@ -52,6 +54,8 @@ let hoverProvider: HoverProvider;
 let definitionProvider: DefinitionProvider;
 let signatureHelpProvider: SignatureHelpProvider;
 let renameProvider: RenameProvider;
+let semanticTokensProvider: SemanticTokensProvider;
+let codeActionProvider: CodeActionProvider;
 let formattingProvider: FormattingProvider;
 
 // Configuration
@@ -87,6 +91,8 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   definitionProvider = new DefinitionProvider(documentManager);
   signatureHelpProvider = new SignatureHelpProvider(functionDb, documentManager);
   renameProvider = new RenameProvider(definitionProvider);
+  semanticTokensProvider = new SemanticTokensProvider(documentManager);
+  codeActionProvider = new CodeActionProvider();
   formattingProvider = new FormattingProvider();
   formattingProvider.setDocumentManager(documentManager);
 
@@ -106,6 +112,12 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
         triggerCharacters: ['(', ',', ' '],
       },
       renameProvider: true,
+      semanticTokensProvider: {
+        legend: semanticTokensLegend,
+        full: true,
+        range: false
+      },
+      codeActionProvider: true,
       documentSymbolProvider: true,
       workspaceSymbolProvider: true,
       documentFormattingProvider: true,
@@ -186,6 +198,20 @@ connection.onRenameRequest((params) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return null;
   return renameProvider.provideRenameEdits(document, params.position, params.newName);
+});
+
+// Semantic Tokens
+connection.languages.semanticTokens.on((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return { data: [] };
+  return semanticTokensProvider.provideSemanticTokens(document);
+});
+
+// Code Actions
+connection.onCodeAction((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return codeActionProvider.provideCodeActions(document, params);
 });
 
 // Document symbols
