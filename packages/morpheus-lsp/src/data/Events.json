@@ -77,65 +77,60 @@
     "description": "A player killed another player.",
     "category": "combat",
     "parameters": [
-      { "name": "local.attacker", "description": "The killer" },
-      { "name": "local.attacker2", "description": "Secondary attacker reference" },
+      { "name": "local.attacker", "description": "The killer (duplicate of self)" },
       { "name": "local.victim", "description": "The player who died" },
       { "name": "local.inflictor", "description": "Entity that directly caused death" },
       { "name": "local.location", "description": "Hit location" },
       { "name": "local.meansofdeath", "description": "Means of death identifier" }
     ],
     "self": "The attacker",
-    "example": "event_player_kill local.attacker local.attacker2 local.victim local.inflictor local.location local.meansofdeath:\n    iprintlnbold(local.attacker.netname + \" killed \" + local.victim.netname)\nend"
+    "example": "event_player_kill local.attacker local.victim local.inflictor local.location local.meansofdeath:\n    iprintlnbold(self.netname + \" killed \" + local.victim.netname)\nend"
   },
   "player_death": {
     "name": "player_death",
     "description": "A player died.",
     "category": "combat",
     "parameters": [
-      { "name": "local.victim", "description": "The player who died" },
       { "name": "local.inflictor", "description": "Entity that caused death" }
     ],
     "self": "The victim",
-    "example": "event_player_death local.victim local.inflictor:\n    iprintlnbold(\"Player \" + local.victim.netname + \" died\")\nend"
+    "example": "event_player_death local.inflictor:\n    iprintlnbold(\"Player \" + self.netname + \" died\")\nend"
   },
   "player_damage": {
     "name": "player_damage",
     "description": "A player took damage.",
     "category": "combat",
     "parameters": [
-      { "name": "local.victim", "description": "The player who took damage" },
       { "name": "local.attacker", "description": "The attacker entity" },
       { "name": "local.damage", "description": "Amount of damage" },
       { "name": "local.meansofdeath", "description": "Means of death identifier" }
     ],
     "self": "The victim",
-    "example": "event_player_damage local.victim local.attacker local.damage local.meansofdeath:\n    iprintlnbold(local.victim.netname + \" took \" + local.damage + \" damage\")\nend"
+    "example": "event_player_damage local.attacker local.damage local.meansofdeath:\n    iprintlnbold(self.netname + \" took \" + local.damage + \" damage\")\nend"
   },
   "player_pain": {
     "name": "player_pain",
     "description": "A player experienced pain with hit location info.",
     "category": "combat",
     "parameters": [
-      { "name": "local.victim", "description": "The player who took damage" },
       { "name": "local.attacker", "description": "The attacker entity" },
       { "name": "local.damage", "description": "Amount of damage" },
       { "name": "local.meansofdeath", "description": "Means of death identifier" },
       { "name": "local.hit_location", "description": "Body part hit (integer)" }
     ],
     "self": "The victim",
-    "example": "event_player_pain local.victim local.attacker local.damage local.meansofdeath local.hit_location:\n    iprintlnbold(local.victim.netname + \" hit in \" + local.hit_location)\nend"
+    "example": "event_player_pain local.attacker local.damage local.meansofdeath local.hit_location:\n    iprintlnbold(self.netname + \" hit in \" + local.hit_location)\nend"
   },
   "player_headshot": {
     "name": "player_headshot",
     "description": "A player got a headshot kill.",
     "category": "combat",
     "parameters": [
-      { "name": "local.attacker", "description": "The player who got the headshot" },
       { "name": "local.victim", "description": "The player who was headshot" },
       { "name": "local.weapon_name", "description": "Name of the weapon used" }
     ],
     "self": "The attacker",
-    "example": "event_player_headshot local.attacker local.victim local.weapon_name:\n    iprintlnbold(local.attacker.netname + \" headshot \" + local.victim.netname + \" with \" + local.weapon_name)\nend"
+    "example": "event_player_headshot local.victim local.weapon_name:\n    iprintlnbold(self.netname + \" headshot \" + local.victim.netname + \" with \" + local.weapon_name)\nend"
   },
   "player_suicide": {
     "name": "player_suicide",
@@ -150,191 +145,174 @@
     "description": "A player was crushed.",
     "category": "combat",
     "parameters": [
-      { "name": "local.victim", "description": "The crushed player" },
       { "name": "local.attacker", "description": "Entity that crushed them" }
     ],
     "self": "The victim",
-    "example": "event_player_crushed local.victim local.attacker:\n    iprintlnbold(local.victim.netname + \" was crushed\")\nend"
+    "example": "event_player_crushed local.attacker:\n    iprintlnbold(self.netname + \" was crushed\")\nend"
   },
   "player_telefragged": {
     "name": "player_telefragged",
     "description": "A player was telefragged.",
     "category": "combat",
     "parameters": [
-      { "name": "local.victim", "description": "The telefragged player" },
       { "name": "local.attacker", "description": "Player who telefragged them" }
     ],
     "self": "The victim",
-    "example": "event_player_telefragged local.victim local.attacker:\n    iprintlnbold(local.victim.netname + \" was telefragged by \" + local.attacker.netname)\nend"
+    "example": "event_player_telefragged local.attacker:\n    iprintlnbold(self.netname + \" was telefragged by \" + local.attacker.netname)\nend"
   },
   "player_roadkill": {
     "name": "player_roadkill",
     "description": "A player was killed by a vehicle.",
     "category": "combat",
     "parameters": [
-      { "name": "local.attacker", "description": "The driver who got the roadkill" },
       { "name": "local.victim", "description": "The player who was run over" }
     ],
     "self": "The attacker",
-    "example": "event_player_roadkill local.attacker local.victim:\n    iprintlnbold(local.attacker.netname + \" ran over \" + local.victim.netname)\nend"
+    "example": "event_player_roadkill local.victim:\n    iprintlnbold(self.netname + \" ran over \" + local.victim.netname)\nend"
   },
   "player_bash": {
     "name": "player_bash",
     "description": "A player got a melee bash kill.",
     "category": "combat",
     "parameters": [
-      { "name": "local.attacker", "description": "The player who bashed" },
       { "name": "local.victim", "description": "The player who was bashed" }
     ],
     "self": "The attacker",
-    "example": "event_player_bash local.attacker local.victim:\n    iprintlnbold(local.attacker.netname + \" bashed \" + local.victim.netname)\nend"
+    "example": "event_player_bash local.victim:\n    iprintlnbold(self.netname + \" bashed \" + local.victim.netname)\nend"
   },
   "player_teamkill": {
     "name": "player_teamkill",
     "description": "A player killed a teammate.",
     "category": "combat",
     "parameters": [
-      { "name": "local.killer", "description": "The player who team killed" },
       { "name": "local.victim", "description": "The teammate who was killed" }
     ],
     "self": "The killer",
-    "example": "event_player_teamkill local.killer local.victim:\n    iprintlnbold(local.killer.netname + \" team killed \" + local.victim.netname)\nend"
+    "example": "event_player_teamkill local.victim:\n    iprintlnbold(self.netname + \" team killed \" + local.victim.netname)\nend"
   },
   "weapon_fire": {
     "name": "weapon_fire",
     "description": "A weapon was fired.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player who fired" },
       { "name": "local.weapon_name", "description": "Name of the weapon" },
       { "name": "local.ammo_remaining", "description": "Ammo left after firing" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_fire local.owner local.weapon_name local.ammo_remaining:\n    // self is the weapon owner\nend"
+    "example": "event_weapon_fire local.weapon_name local.ammo_remaining:\n    // self is the weapon owner\nend"
   },
   "weapon_hit": {
     "name": "weapon_hit",
     "description": "A weapon hit a target.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player who fired" },
       { "name": "local.target", "description": "The entity that was hit" },
       { "name": "local.hit_location_or_type", "description": "Hit location or 'projectile' for projectile hits" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_hit local.owner local.target local.hit_location_or_type:\n    iprintlnbold(local.owner.netname + \" hit \" + local.target.netname)\nend"
+    "example": "event_weapon_hit local.target local.hit_location_or_type:\n    iprintlnbold(self.netname + \" hit \" + local.target.netname)\nend"
   },
   "weapon_reload": {
     "name": "weapon_reload",
     "description": "A weapon started reloading.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player reloading" },
       { "name": "local.weapon_name", "description": "Name of the weapon" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_reload local.owner local.weapon_name:\n    // Player started reloading\nend"
+    "example": "event_weapon_reload local.weapon_name:\n    // Player started reloading\nend"
   },
   "weapon_reload_done": {
     "name": "weapon_reload_done",
     "description": "A weapon finished reloading.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player who reloaded" },
       { "name": "local.weapon_name", "description": "Name of the weapon" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_reload_done local.owner local.weapon_name:\n    // Reload complete\nend"
+    "example": "event_weapon_reload_done local.weapon_name:\n    // Reload complete\nend"
   },
   "weapon_change": {
     "name": "weapon_change",
     "description": "A player switched weapons.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player who switched" },
       { "name": "local.old_weapon", "description": "Previous weapon name (or 'none')" },
       { "name": "local.new_weapon", "description": "New weapon name" },
       { "name": "local.client_num", "description": "Client number" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_change local.owner local.old_weapon local.new_weapon local.client_num:\n    iprintlnbold(local.owner.netname + \" switched from \" + local.old_weapon + \" to \" + local.new_weapon)\nend"
+    "example": "event_weapon_change local.old_weapon local.new_weapon local.client_num:\n    iprintlnbold(self.netname + \" switched from \" + local.old_weapon + \" to \" + local.new_weapon)\nend"
   },
   "weapon_ready": {
     "name": "weapon_ready",
     "description": "A weapon became ready.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player" },
       { "name": "local.weapon_name", "description": "Name of the weapon" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_ready local.owner local.weapon_name:\n    // Weapon is ready to fire\nend"
+    "example": "event_weapon_ready local.weapon_name:\n    // Weapon is ready to fire\nend"
   },
   "weapon_no_ammo": {
     "name": "weapon_no_ammo",
     "description": "A weapon ran out of ammo.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player" },
       { "name": "local.weapon_name", "description": "Name of the weapon" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_no_ammo local.owner local.weapon_name:\n    iprintlnbold(local.owner.netname + \" is out of ammo for \" + local.weapon_name)\nend"
+    "example": "event_weapon_no_ammo local.weapon_name:\n    iprintlnbold(self.netname + \" is out of ammo for \" + local.weapon_name)\nend"
   },
   "weapon_holster": {
     "name": "weapon_holster",
     "description": "A weapon was holstered.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player" },
       { "name": "local.weapon_name", "description": "Name of the weapon" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_holster local.owner local.weapon_name:\n    // Weapon holstered\nend"
+    "example": "event_weapon_holster local.weapon_name:\n    // Weapon holstered\nend"
   },
   "weapon_raise": {
     "name": "weapon_raise",
     "description": "A weapon was raised.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player" },
       { "name": "local.weapon_name", "description": "Name of the weapon" }
     ],
     "self": "The weapon owner",
-    "example": "event_weapon_raise local.owner local.weapon_name:\n    // Weapon raised\nend"
+    "example": "event_weapon_raise local.weapon_name:\n    // Weapon raised\nend"
   },
   "weapon_drop": {
     "name": "weapon_drop",
     "description": "A weapon was dropped.",
     "category": "combat",
     "parameters": [
-      { "name": "local.previous_owner", "description": "The player who dropped it" },
       { "name": "local.weapon_entity", "description": "The dropped weapon entity" }
     ],
     "self": "The previous owner",
-    "example": "event_weapon_drop local.previous_owner local.weapon_entity:\n    iprintlnbold(local.previous_owner.netname + \" dropped a weapon\")\nend"
+    "example": "event_weapon_drop local.weapon_entity:\n    iprintlnbold(self.netname + \" dropped a weapon\")\nend"
   },
   "grenade_throw": {
     "name": "grenade_throw",
     "description": "A grenade was thrown.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player who threw it" },
       { "name": "local.projectile_entity", "description": "The grenade entity" }
     ],
     "self": "The thrower",
-    "example": "event_grenade_throw local.owner local.projectile_entity:\n    iprintlnbold(local.owner.netname + \" threw a grenade\")\nend"
+    "example": "event_grenade_throw local.projectile_entity:\n    iprintlnbold(self.netname + \" threw a grenade\")\nend"
   },
   "grenade_explode": {
     "name": "grenade_explode",
     "description": "A grenade exploded.",
     "category": "combat",
     "parameters": [
-      { "name": "local.owner", "description": "The player who threw it" },
       { "name": "local.grenade_entity", "description": "The grenade entity" }
     ],
     "self": "The thrower",
-    "example": "event_grenade_explode local.owner local.grenade_entity:\n    // Grenade exploded\nend"
+    "example": "event_grenade_explode local.grenade_entity:\n    // Grenade exploded\nend"
   },
   "player_spawn": {
     "name": "player_spawn",

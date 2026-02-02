@@ -391,7 +391,7 @@ export class CompletionProvider {
       
       items.push({
         label: name,
-        kind: CompletionItemKind.Event,
+        kind: CompletionItemKind.Constant,
         detail: `${categoryLabel}`,
         documentation: {
           kind: MarkupKind.Markdown,

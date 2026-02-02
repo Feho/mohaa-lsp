@@ -33,12 +33,27 @@ export class MorpheusDebugAdapter implements DebugAdapter {
     this.connect();
   }
 
+  /**
+   * Send an output event to the Debug Console
+   */
+  private sendOutput(category: 'console' | 'stdout' | 'stderr', output: string): void {
+    this.onDidSendMessageEmitter.fire({
+      type: 'event',
+      event: 'output',
+      seq: this.messageSequence++,
+      body: {
+        category,
+        output: output.endsWith('\n') ? output : `${output}\n`,
+      },
+    } as DebugProtocolMessage);
+  }
+
   private connect(): void {
     this.socket.connect(this.port, this.host);
 
     this.socket.on('connect', () => {
       this.isConnected = true;
-      console.log(`Connected to OpenMOHAA DAP server at ${this.host}:${this.port}`);
+      this.sendOutput('console', `Connected to OpenMOHAA DAP server at ${this.host}:${this.port}`);
     });
 
     this.socket.on('data', (data) => {
@@ -47,7 +62,7 @@ export class MorpheusDebugAdapter implements DebugAdapter {
 
     this.socket.on('close', () => {
       this.isConnected = false;
-      console.log('DAP server connection closed');
+      this.sendOutput('console', 'DAP server connection closed');
       this.onDidSendMessageEmitter.fire({
         type: 'event',
         event: 'terminated',
@@ -56,16 +71,7 @@ export class MorpheusDebugAdapter implements DebugAdapter {
     });
 
     this.socket.on('error', (err) => {
-      console.error('DAP connection error:', err);
-      this.onDidSendMessageEmitter.fire({
-        type: 'event',
-        event: 'output',
-        seq: this.messageSequence++,
-        body: {
-          category: 'stderr',
-          output: `Connection error: ${err.message}\n`,
-        },
-      } as DebugProtocolMessage);
+      this.sendOutput('stderr', `DAP connection error: ${err.message}`);
     });
   }
 
@@ -85,14 +91,26 @@ export class MorpheusDebugAdapter implements DebugAdapter {
     if (this.isConnected) {
       this.socket.write(buffer);
     } else {
-      // Queue the message until connected
-      this.socket.once('connect', () => {
+      // Queue the message until connected, but add a timeout so it doesn't hang indefinitely
+      const connectTimeoutMs = 5000;
+      
+      const onConnect = () => {
+        clearTimeout(timeoutId);
         this.socket.write(buffer);
-      });
+      };
+      
+      const timeoutId = setTimeout(() => {
+        this.socket.removeListener('connect', onConnect);
+        this.sendOutput('stderr', `DAP connection timeout after ${connectTimeoutMs}ms; dropping queued message.`);
+      }, connectTimeoutMs);
+
+      this.socket.once('connect', onConnect);
     }
   }
 
   dispose(): void {
+    this.isConnected = false;
+    this.socket.removeAllListeners();
     this.socket.end();
     this.socket.destroy();
     this.onDidSendMessageEmitter.dispose();
@@ -126,7 +144,7 @@ export class MorpheusDebugAdapter implements DebugAdapter {
         this.transformIncomingMessage(message);
         this.onDidSendMessageEmitter.fire(message);
       } catch (err) {
-        console.error('Error parsing DAP message:', err);
+        this.sendOutput('stderr', `Error parsing DAP message: ${err}`);
       }
     }
   }
@@ -208,9 +226,9 @@ export class MorpheusDebugAdapter implements DebugAdapter {
         if (breakpoints) {
           for (const bp of breakpoints) {
             if (!bp.verified) {
-              console.warn(
-                `Breakpoint UNVERIFIED at line ${bp.line}. ` +
-                  `Ensure the script is loaded in the game.`
+              this.sendOutput(
+                'console',
+                `Breakpoint UNVERIFIED at line ${bp.line}. Ensure the script is loaded in the game.`
               );
             }
           }
@@ -242,7 +260,7 @@ export class MorpheusDebugAdapter implements DebugAdapter {
       }
       case 'stopped': {
         // Log stop events for debugging
-        console.log('Debugger stopped:', body.reason);
+        this.sendOutput('console', `Debugger stopped: ${body.reason}`);
         break;
       }
     }
@@ -259,7 +277,7 @@ export class MorpheusDebugAdapter implements DebugAdapter {
     const mainIndex = normalized.lastIndexOf('/main/');
     if (mainIndex !== -1) {
       const result = normalized.substring(mainIndex + 6);
-      console.log(`toRemotePath: ${localPath} -> ${result} (via /main/ match)`);
+      this.sendOutput('console', `toRemotePath: ${localPath} -> ${result} (via /main/ match)`);
       return result;
     }
 
@@ -276,13 +294,14 @@ export class MorpheusDebugAdapter implements DebugAdapter {
           relative = relative.substring(5);
         }
 
-        console.log(`toRemotePath: ${localPath} -> ${relative} (via workspace root)`);
+        this.sendOutput('console', `toRemotePath: ${localPath} -> ${relative} (via workspace root)`);
         return relative;
       }
     }
 
     // Fallback: return as-is
-    console.warn(
+    this.sendOutput(
+      'console',
       `toRemotePath: Could not normalize ${localPath}. Returning as-is.`
     );
     return normalized;
@@ -294,13 +313,13 @@ export class MorpheusDebugAdapter implements DebugAdapter {
    */
   private toLocalPath(remotePath: string): string {
     if (!this.workspaceRoot) {
-      console.warn(`toLocalPath: No workspace root. Cannot resolve ${remotePath}`);
+      this.sendOutput('console', `toLocalPath: No workspace root. Cannot resolve ${remotePath}`);
       return remotePath;
     }
 
     // Check if already absolute
     if (remotePath.startsWith('/') || /^[a-z]:/i.test(remotePath)) {
-      console.log(`toLocalPath: Path appears absolute: ${remotePath}`);
+      this.sendOutput('console', `toLocalPath: Path appears absolute: ${remotePath}`);
       return remotePath;
     }
 
@@ -313,7 +332,7 @@ export class MorpheusDebugAdapter implements DebugAdapter {
       ? path.join(this.workspaceRoot, remotePath)
       : path.join(this.workspaceRoot, 'main', remotePath);
 
-    console.log(`toLocalPath: ${remotePath} -> ${localPath}`);
+    this.sendOutput('console', `toLocalPath: ${remotePath} -> ${localPath}`);
     return localPath;
   }
 }

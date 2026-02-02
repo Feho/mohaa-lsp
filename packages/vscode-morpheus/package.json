@@ -33,7 +33,7 @@
   },
   "homepage": "https://github.com/elgansayer/mohaa-lsp#readme",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
     "Programming Languages",

@@ -14,7 +14,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import Parser from 'web-tree-sitter';
 import { DocumentManager } from '../parser/documentManager';
-import { isInitialized, nodeToRange } from '../parser/treeSitterParser';
+import { isInitialized } from '../parser/treeSitterParser';
 
 export interface FormattingConfig {
   /** Use spaces instead of tabs */
@@ -83,7 +83,7 @@ export class FormattingProvider {
 
       // Get expected indent
       const expectedIndent = lineIndents.get(i) ?? 0;
-      const currentIndent = this.getIndentLevel(line, options);
+      // const currentIndent = this.getIndentLevel(line, options); // Unused
       const newIndent = indentChar.repeat(expectedIndent * indentSize);
 
       // Only create edit if indentation differs
@@ -119,8 +119,10 @@ export class FormattingProvider {
     depth: number,
     indents: Map<number, number>
   ): void {
+    // Prevent stack overflow for deeply nested structures
+    if (depth > 500) return;
+
     const startLine = node.startPosition.row;
-    const endLine = node.endPosition.row;
 
     // Determine indent based on node type
     switch (node.type) {
@@ -368,6 +370,11 @@ export class FormattingProvider {
     range: Range,
     options: FormattingOptions
   ): TextEdit[] {
+    // PERFORMANCE: We currently calculate indents for the whole document even for a range.
+    // This ensures correctness as indentation depends on parent scopes (which may be outside the range),
+    // but may be slow for very large files.
+    // Future optimization: Calculate indents only for the target range + context.
+    
     // For now, format the whole document and filter edits
     const allEdits = this.formatDocument(document, options);
     return allEdits.filter((edit) => {
