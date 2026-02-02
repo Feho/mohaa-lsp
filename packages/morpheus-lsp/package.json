@@ -12,7 +12,7 @@
     "watch": "tsc -w",
     "clean": "rm -rf dist",
     "lint": "eslint src --ext .ts",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "dependencies": {
     "tree-sitter-morpheus": "workspace:*",
