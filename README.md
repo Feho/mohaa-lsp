@@ -36,6 +36,7 @@ Full-featured Language Server Protocol implementation for MOHAA Morpheus Script 
 - **BT**: Breakthrough expansion
 - **Reborn**: Reborn community patch
 - **NightFall**: NightFall community patch
+- **OPM**: OpenMohaa community remake
 
 ## Packages
 
@@ -147,6 +148,7 @@ Functions are tagged with game version compatibility:
 - **BT**: Breakthrough expansion
 - **Reborn**: Reborn community patch
 - **NightFall**: NightFall community patch
+- **OPM**: OpenMohaa community remake
 
 Configure which versions to enable in your editor settings.
 
@@ -182,6 +184,7 @@ mohaa-lsp/
 
 ### Debugging
 
+Only supported in DAP Enabled OPM builds
 Create a `.vscode/launch.json`:
 
 ```json
