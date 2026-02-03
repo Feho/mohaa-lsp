@@ -2,9 +2,10 @@
  * Function database loader for Morpheus Script LSP
  *
  * Loads function documentation from Morpheus.json and Reborn.json
+ * Also loads event documentation from Events.json
  */
 
-import { FunctionDatabase, FunctionDoc, GameVersion } from './types';
+import { FunctionDatabase, FunctionDoc, GameVersion, EventDatabase, EventDoc, EventCategory } from './types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -77,6 +78,23 @@ export const CONTROL_KEYWORDS = [
 export const STORAGE_TYPES = ['bool', 'entity', 'float', 'int', 'string'];
 
 /**
+ * Helper to find the correct data directory
+ */
+function getDataDir(): string {
+  // If we are in src/data, files are here
+  if (__dirname.endsWith('data') || __dirname.endsWith('data/')) {
+    return __dirname;
+  }
+  // Otherwise try the data subdirectory (for bundled/dist)
+  const subDir = path.join(__dirname, 'data');
+  if (fs.existsSync(subDir)) {
+    return subDir;
+  }
+  // Fallback
+  return __dirname;
+}
+
+/**
  * Loads and merges function databases
  */
 export class FunctionDatabaseLoader {
@@ -91,20 +109,24 @@ export class FunctionDatabaseLoader {
   async load(): Promise<void> {
     if (this.loaded) return;
 
-    const dataDir = path.join(__dirname, 'data');
+    const dataDir = getDataDir();
 
     try {
       const morpheusPath = path.join(dataDir, 'Morpheus.json');
-      const morpheusContent = fs.readFileSync(morpheusPath, 'utf-8');
-      this.morpheusDb = JSON.parse(morpheusContent);
+      if (fs.existsSync(morpheusPath)) {
+        const morpheusContent = fs.readFileSync(morpheusPath, 'utf-8');
+        this.morpheusDb = JSON.parse(morpheusContent);
+      }
     } catch (e) {
       console.error('Failed to load Morpheus.json:', e);
     }
 
     try {
       const rebornPath = path.join(dataDir, 'Reborn.json');
-      const rebornContent = fs.readFileSync(rebornPath, 'utf-8');
-      this.rebornDb = JSON.parse(rebornContent);
+      if (fs.existsSync(rebornPath)) {
+        const rebornContent = fs.readFileSync(rebornPath, 'utf-8');
+        this.rebornDb = JSON.parse(rebornContent);
+      }
     } catch (e) {
       console.error('Failed to load Reborn.json:', e);
     }
@@ -197,3 +219,133 @@ export class FunctionDatabaseLoader {
 
 // Singleton instance
 export const functionDb = new FunctionDatabaseLoader();
+
+/**
+ * Event category display names
+ */
+export const EVENT_CATEGORY_LABELS: Record<EventCategory, string> = {
+  player: 'Player Events',
+  combat: 'Combat Events',
+  movement: 'Movement Events',
+  interaction: 'Interaction Events',
+  item: 'Item Events',
+  vehicle: 'Vehicle/Turret Events',
+  server: 'Server Events',
+  map: 'Map Events',
+  game: 'Game Flow Events',
+  team: 'Team/Vote Events',
+  client: 'Client Events',
+  world: 'World Events',
+  ai: 'AI/Actor Events',
+  score: 'Score/Admin Events',
+};
+
+/**
+ * Loads and manages event database
+ */
+export class EventDatabaseLoader {
+  private eventsDb: EventDatabase = {};
+  private loaded = false;
+
+  /**
+   * Load event database from JSON file
+   */
+  async load(): Promise<void> {
+    if (this.loaded) return;
+
+    const dataDir = getDataDir();
+
+    try {
+      const eventsPath = path.join(dataDir, 'Events.json');
+      if (fs.existsSync(eventsPath)) {
+        const eventsContent = fs.readFileSync(eventsPath, 'utf-8');
+        this.eventsDb = JSON.parse(eventsContent);
+      }
+    } catch (e) {
+      console.error('Failed to load Events.json:', e);
+    }
+
+    this.loaded = true;
+  }
+
+  /**
+   * Get all event names
+   */
+  getAllEvents(): string[] {
+    return Object.keys(this.eventsDb).sort();
+  }
+
+  /**
+   * Get event documentation by name
+   */
+  getEvent(name: string): EventDoc | undefined {
+    // Case-insensitive lookup
+    const lowerName = name.toLowerCase();
+    for (const [key, value] of Object.entries(this.eventsDb)) {
+      if (key.toLowerCase() === lowerName) {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Search events by prefix
+   */
+  searchByPrefix(prefix: string): Array<{ name: string; doc: EventDoc }> {
+    const lowerPrefix = prefix.toLowerCase();
+    const results: Array<{ name: string; doc: EventDoc }> = [];
+
+    for (const [name, doc] of Object.entries(this.eventsDb)) {
+      if (name.toLowerCase().startsWith(lowerPrefix)) {
+        results.push({ name, doc });
+      }
+    }
+
+    return results.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Filter events by category
+   */
+  filterByCategory(category: EventCategory): EventDatabase {
+    const filtered: EventDatabase = {};
+
+    for (const [name, doc] of Object.entries(this.eventsDb)) {
+      if (doc.category === category) {
+        filtered[name] = doc;
+      }
+    }
+
+    return filtered;
+  }
+
+  /**
+   * Get all unique categories
+   */
+  getAllCategories(): EventCategory[] {
+    const categories = new Set<EventCategory>();
+    for (const doc of Object.values(this.eventsDb)) {
+      categories.add(doc.category);
+    }
+    return Array.from(categories).sort();
+  }
+
+  /**
+   * Get events grouped by category
+   */
+  getEventsByCategory(): Map<EventCategory, EventDoc[]> {
+    const grouped = new Map<EventCategory, EventDoc[]>();
+
+    for (const doc of Object.values(this.eventsDb)) {
+      const list = grouped.get(doc.category) || [];
+      list.push(doc);
+      grouped.set(doc.category, list);
+    }
+
+    return grouped;
+  }
+}
+
+// Singleton instance
+export const eventDb = new EventDatabaseLoader();

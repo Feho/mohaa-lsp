@@ -15,6 +15,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import Parser from 'web-tree-sitter';
 import {
   FunctionDatabaseLoader,
+  EventDatabaseLoader,
+  EVENT_CATEGORY_LABELS,
   SCOPE_KEYWORDS,
   CONTROL_KEYWORDS,
   LEVEL_PROPERTIES,
@@ -22,6 +24,7 @@ import {
   PARM_PROPERTIES,
   ENTITY_PROPERTIES,
 } from '../data/database';
+import { EventCategory } from '../data/types';
 import {
   isInitialized,
   nodeToRange,
@@ -30,6 +33,7 @@ import {
 
 export class HoverProvider {
   private documentManager: { getTree(uri: string): Parser.Tree | null } | null = null;
+  private eventDb: EventDatabaseLoader | null = null;
 
   constructor(private db: FunctionDatabaseLoader) {}
 
@@ -38,6 +42,13 @@ export class HoverProvider {
    */
   setDocumentManager(manager: { getTree(uri: string): Parser.Tree | null }): void {
     this.documentManager = manager;
+  }
+
+  /**
+   * Set the event database for event hover information.
+   */
+  setEventDatabase(eventDb: EventDatabaseLoader): void {
+    this.eventDb = eventDb;
   }
 
   /**
@@ -71,6 +82,12 @@ export class HoverProvider {
     }
 
     if (!word || !wordRange) return null;
+
+    // Check if this is an event name in event_subscribe call
+    const eventHover = this.checkForEventHover(document, position, wordRange, word);
+    if (eventHover) {
+      return eventHover;
+    }
 
     // Check for function
     const funcDoc = this.db.getFunction(word);
@@ -359,5 +376,123 @@ export class HoverProvider {
     }
 
     return null;
+  }
+
+  /**
+   * Check if we're hovering over an event name in event_subscribe call
+   */
+  private checkForEventHover(
+    document: TextDocument,
+    position: Position,
+    wordRange: Range,
+    word: string
+  ): Hover | null {
+    if (!this.eventDb) return null;
+
+    const text = document.getText();
+    const lineStart = document.offsetAt({ line: position.line, character: 0 });
+    const lineEnd = text.indexOf('\n', lineStart);
+    const lineText = text.substring(lineStart, lineEnd === -1 ? undefined : lineEnd);
+
+    // Check if we're in an event_subscribe call
+    const eventSubscribeMatch = lineText.match(/event_subscribe\s+["']([^"']+)["']/i);
+    if (eventSubscribeMatch) {
+      const eventName = eventSubscribeMatch[1];
+      const eventIndex = lineText.indexOf(eventName);
+      
+      // Check if the cursor is within the event name
+      const cursorCol = position.character;
+      if (cursorCol >= eventIndex && cursorCol <= eventIndex + eventName.length) {
+        const eventDoc = this.eventDb.getEvent(eventName);
+        if (eventDoc) {
+          return {
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: this.formatEventHover(eventName, eventDoc),
+            },
+            range: {
+              start: { line: position.line, character: eventIndex },
+              end: { line: position.line, character: eventIndex + eventName.length },
+            },
+          };
+        }
+      }
+    }
+
+    // Also try looking up the word directly as an event name (if in a string)
+    const offset = document.offsetAt(position);
+    const textBefore = text.substring(Math.max(0, offset - 100), offset);
+    if (textBefore.match(/event_subscribe\s+["'][^"']*$/i)) {
+      const eventDoc = this.eventDb.getEvent(word);
+      if (eventDoc) {
+        return {
+          contents: {
+            kind: MarkupKind.Markdown,
+            value: this.formatEventHover(word, eventDoc),
+          },
+          range: wordRange,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Format event hover content
+   */
+  private formatEventHover(
+    name: string,
+    doc: {
+      name: string;
+      description: string;
+      category: EventCategory;
+      parameters: Array<{ name: string; description: string }>;
+      self: string;
+      example: string;
+    }
+  ): string {
+    const parts: string[] = [];
+    const categoryLabel = EVENT_CATEGORY_LABELS[doc.category] || doc.category;
+
+    // Header with event name and category
+    parts.push(`**Event:** \`${name}\``);
+    parts.push(`**Category:** ${categoryLabel}`);
+    parts.push('');
+
+    // Description
+    if (doc.description) {
+      parts.push(doc.description);
+    }
+
+    // Self reference
+    if (doc.self && doc.self !== 'None') {
+      parts.push('');
+      parts.push(`**self:** ${doc.self}`);
+    }
+
+    // Parameters
+    if (doc.parameters.length > 0) {
+      parts.push('');
+      parts.push('**Parameters:**');
+      for (const param of doc.parameters) {
+        parts.push(`- \`${param.name}\`: ${param.description}`);
+      }
+    } else {
+      parts.push('');
+      parts.push('**Parameters:** None');
+    }
+
+    // Example
+    if (doc.example) {
+      parts.push('');
+      parts.push('---');
+      parts.push('**Example:**');
+      parts.push('```morpheus');
+      parts.push(doc.example);
+      parts.push('```');
+    }
+
+    return parts.join('\n');
   }
 }

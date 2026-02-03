@@ -16,6 +16,8 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import Parser from 'web-tree-sitter';
 import {
   FunctionDatabaseLoader,
+  EventDatabaseLoader,
+  EVENT_CATEGORY_LABELS,
   SCOPE_KEYWORDS,
   CONTROL_KEYWORDS,
   STORAGE_TYPES,
@@ -25,6 +27,7 @@ import {
   ENTITY_PROPERTIES,
   LEVEL_PHASES,
 } from '../data/database';
+import { EventCategory } from '../data/types';
 import {
   isInitialized,
   nodeAtPosition,
@@ -37,13 +40,14 @@ import {
  * Completion context information.
  */
 interface CompletionContext {
-  type: 'scope' | 'property' | 'entity' | 'function' | 'levelphase' | 'general';
+  type: 'scope' | 'property' | 'entity' | 'function' | 'levelphase' | 'event' | 'general';
   scope?: string;
   prefix?: string;
 }
 
 export class CompletionProvider {
   private documentManager: { getTree(uri: string): Parser.Tree | null } | null = null;
+  private eventDb: EventDatabaseLoader | null = null;
 
   constructor(private db: FunctionDatabaseLoader) {}
 
@@ -53,6 +57,13 @@ export class CompletionProvider {
    */
   setDocumentManager(manager: { getTree(uri: string): Parser.Tree | null }): void {
     this.documentManager = manager;
+  }
+
+  /**
+   * Set the event database for event completions.
+   */
+  setEventDatabase(eventDb: EventDatabaseLoader): void {
+    this.eventDb = eventDb;
   }
 
   /**
@@ -85,6 +96,8 @@ export class CompletionProvider {
         return this.getEntityCompletions();
       case 'levelphase':
         return this.getLevelPhaseCompletions();
+      case 'event':
+        return this.getEventCompletions(context.prefix || '');
       case 'function':
         return this.getFunctionCompletions(context.prefix || '');
       default:
@@ -102,6 +115,14 @@ export class CompletionProvider {
         item.documentation = {
           kind: MarkupKind.Markdown,
           value: this.formatFunctionDoc(item.label as string, doc),
+        };
+      }
+    } else if (item.data?.type === 'event' && this.eventDb) {
+      const doc = this.eventDb.getEvent(item.label as string);
+      if (doc) {
+        item.documentation = {
+          kind: MarkupKind.Markdown,
+          value: this.formatEventDoc(item.label as string, doc),
         };
       }
     }
@@ -178,6 +199,13 @@ export class CompletionProvider {
               return { type: 'levelphase' };
             }
           }
+          if (funcName === 'event_subscribe') {
+            // Check if cursor is in the first argument area (event name)
+            const argsNode = current.childForFieldName('arguments');
+            if (!argsNode || point.column > funcNode.endPosition.column) {
+              return { type: 'event', prefix: '' };
+            }
+          }
         }
       }
       
@@ -225,6 +253,17 @@ export class CompletionProvider {
     // Check for waittill level context
     if (lineText.match(/waittill\s+$/i)) {
       return { type: 'levelphase' };
+    }
+
+    // Check for event_subscribe context (detect when writing first argument - event name)
+    // Matches: event_subscribe " or event_subscribe "partial
+    const eventSubscribeMatch = lineText.match(/event_subscribe\s+["']([^"']*)$/i);
+    if (eventSubscribeMatch) {
+      return { type: 'event', prefix: eventSubscribeMatch[1] || '' };
+    }
+    // Also match if just typed event_subscribe with space after
+    if (lineText.match(/event_subscribe\s+$/i)) {
+      return { type: 'event', prefix: '' };
     }
 
     // Check for function/identifier at word boundary
@@ -315,6 +354,95 @@ export class CompletionProvider {
       detail: 'Level phase',
       sortText: `0${i}`,
     }));
+  }
+
+  /**
+   * Get event completions for event_subscribe
+   */
+  private getEventCompletions(prefix: string): CompletionItem[] {
+    if (!this.eventDb) {
+      return [];
+    }
+
+    const events = prefix
+      ? this.eventDb.searchByPrefix(prefix)
+      : this.eventDb.getAllEvents().map(name => ({ name, doc: this.eventDb!.getEvent(name)! }));
+
+    // Group events by category for better organization
+    const items: CompletionItem[] = [];
+    const categoryOrder: EventCategory[] = [
+      'player', 'combat', 'movement', 'interaction', 'item', 'vehicle',
+      'server', 'map', 'game', 'team', 'client', 'world', 'ai', 'score'
+    ];
+
+    // Create a map for sorting by category
+    const categoryIndex = new Map(categoryOrder.map((cat, i) => [cat, i]));
+
+    const sortedEvents = events.sort((a, b) => {
+      const catA = categoryIndex.get(a.doc.category) ?? 99;
+      const catB = categoryIndex.get(b.doc.category) ?? 99;
+      if (catA !== catB) return catA - catB;
+      return a.name.localeCompare(b.name);
+    });
+
+    for (let i = 0; i < sortedEvents.length; i++) {
+      const { name, doc } = sortedEvents[i];
+      const categoryLabel = EVENT_CATEGORY_LABELS[doc.category] || doc.category;
+      
+      items.push({
+        label: name,
+        kind: CompletionItemKind.Constant,
+        detail: `${categoryLabel}`,
+        documentation: {
+          kind: MarkupKind.Markdown,
+          value: this.formatEventDoc(name, doc),
+        },
+        sortText: `0${String(i).padStart(3, '0')}`,
+        // Insert the event name with quotes if not already in quotes
+        insertText: name,
+        data: { type: 'event' },
+      });
+    }
+
+    return items;
+  }
+
+  /**
+   * Format event documentation as Markdown
+   */
+  private formatEventDoc(name: string, doc: { description: string; parameters: Array<{ name: string; description: string }>; self: string; example: string }): string {
+    const parts: string[] = [];
+
+    // Description
+    if (doc.description) {
+      parts.push(doc.description);
+    }
+
+    // Self reference
+    if (doc.self && doc.self !== 'None') {
+      parts.push('');
+      parts.push(`**self:** ${doc.self}`);
+    }
+
+    // Parameters
+    if (doc.parameters.length > 0) {
+      parts.push('');
+      parts.push('**Parameters:**');
+      for (const param of doc.parameters) {
+        parts.push(`- \`${param.name}\`: ${param.description}`);
+      }
+    }
+
+    // Example
+    if (doc.example) {
+      parts.push('');
+      parts.push('**Example:**');
+      parts.push('```morpheus');
+      parts.push(doc.example);
+      parts.push('```');
+    }
+
+    return parts.join('\n');
   }
 
   /**

@@ -28,10 +28,16 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import Parser from 'web-tree-sitter';
 
-import { functionDb } from './data/database';
+import { functionDb, eventDb } from './data/database';
 import { CompletionProvider } from './capabilities/completion';
 import { HoverProvider } from './capabilities/hover';
 import { DefinitionProvider } from './capabilities/definition';
+import { SignatureHelpProvider } from './capabilities/signatureHelp';
+import { RenameProvider } from './capabilities/rename';
+import { SemanticTokensProvider, semanticTokensLegend } from './capabilities/semanticTokens';
+import { CodeActionProvider } from './capabilities/codeActions';
+import { FormattingProvider } from './capabilities/formatting';
+import { validateWithMfuse, MfuseValidatorConfig } from './capabilities/mfuseValidator';
 import { DocumentManager } from './parser/documentManager';
 import { initParser, isInitialized, collectErrors, nodeToRange } from './parser/treeSitterParser';
 
@@ -46,10 +52,26 @@ const documentManager = new DocumentManager();
 let completionProvider: CompletionProvider;
 let hoverProvider: HoverProvider;
 let definitionProvider: DefinitionProvider;
+let signatureHelpProvider: SignatureHelpProvider;
+let renameProvider: RenameProvider;
+let semanticTokensProvider: SemanticTokensProvider;
+let codeActionProvider: CodeActionProvider;
+let formattingProvider: FormattingProvider;
+
+// Configuration
+let mfuseConfig: MfuseValidatorConfig = {
+  execPath: '',
+  commandsPath: '',
+  trigger: 'onSave',
+};
+let formattingEnabled = true;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   // Load function database
   await functionDb.load();
+  
+  // Load event database
+  await eventDb.load();
 
   // Initialize tree-sitter parser
   try {
@@ -62,9 +84,17 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   // Initialize providers
   completionProvider = new CompletionProvider(functionDb);
   completionProvider.setDocumentManager(documentManager);
+  completionProvider.setEventDatabase(eventDb);
   hoverProvider = new HoverProvider(functionDb);
   hoverProvider.setDocumentManager(documentManager);
+  hoverProvider.setEventDatabase(eventDb);
   definitionProvider = new DefinitionProvider(documentManager);
+  signatureHelpProvider = new SignatureHelpProvider(functionDb, documentManager);
+  renameProvider = new RenameProvider(definitionProvider);
+  semanticTokensProvider = new SemanticTokensProvider(documentManager);
+  codeActionProvider = new CodeActionProvider();
+  formattingProvider = new FormattingProvider();
+  formattingProvider.setDocumentManager(documentManager);
 
   connection.console.log('Morpheus LSP initialized');
 
@@ -78,8 +108,20 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
       hoverProvider: true,
       definitionProvider: true,
       referencesProvider: true,
+      signatureHelpProvider: {
+        triggerCharacters: ['(', ',', ' '],
+      },
+      renameProvider: true,
+      semanticTokensProvider: {
+        legend: semanticTokensLegend,
+        full: true,
+        range: false
+      },
+      codeActionProvider: true,
       documentSymbolProvider: true,
       workspaceSymbolProvider: true,
+      documentFormattingProvider: true,
+      documentRangeFormattingProvider: true,
     },
   };
 });
@@ -91,7 +133,7 @@ connection.onInitialized(() => {
 // Document lifecycle
 documents.onDidOpen((event) => {
   documentManager.openDocument(event.document);
-  validateDocument(event.document);
+  validateDocument(event.document, 'onChange');
 });
 
 documents.onDidChangeContent((event) => {
@@ -100,7 +142,11 @@ documents.onDidChangeContent((event) => {
   // and track the content changes ourselves. The tree-sitter parser is still fast enough
   // for most documents with full re-parse.
   documentManager.updateDocument(event.document);
-  validateDocument(event.document);
+  validateDocument(event.document, 'onChange');
+});
+
+documents.onDidSave((event) => {
+  validateDocument(event.document, 'onSave');
 });
 
 documents.onDidClose((event) => {
@@ -140,6 +186,34 @@ connection.onReferences((params) => {
   return definitionProvider.findReferences(document, params.position);
 });
 
+// Signature Help
+connection.onSignatureHelp((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return signatureHelpProvider.provideSignatureHelp(document, params.position);
+});
+
+// Rename
+connection.onRenameRequest((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return renameProvider.provideRenameEdits(document, params.position, params.newName);
+});
+
+// Semantic Tokens
+connection.languages.semanticTokens.on((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return { data: [] };
+  return semanticTokensProvider.provideSemanticTokens(document);
+});
+
+// Code Actions
+connection.onCodeAction((params) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return codeActionProvider.provideCodeActions(document, params);
+});
+
 // Document symbols
 connection.onDocumentSymbol((params) => {
   const document = documents.get(params.textDocument.uri);
@@ -152,12 +226,53 @@ connection.onWorkspaceSymbol((params) => {
   return documentManager.searchWorkspaceSymbols(params.query);
 });
 
+// Document formatting
+connection.onDocumentFormatting((params) => {
+  if (!formattingEnabled) return [];
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return formattingProvider.formatDocument(document, params.options);
+});
+
+// Range formatting
+connection.onDocumentRangeFormatting((params) => {
+  if (!formattingEnabled) return [];
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return formattingProvider.formatRange(document, params.range, params.options);
+});
+
+// Configuration change handler
+connection.onDidChangeConfiguration((change) => {
+  const settings = change.settings?.morpheus;
+  if (settings) {
+    // Update mfuse configuration
+    if (settings.validation) {
+      mfuseConfig = {
+        execPath: settings.validation.mfusePath || '',
+        commandsPath: settings.validation.commandsPath || '',
+        trigger: settings.validation.trigger || 'onSave',
+      };
+    }
+    // Update formatting configuration
+    if (settings.formatting !== undefined) {
+      formattingEnabled = settings.formatting.enable !== false;
+    }
+  }
+  
+  // Re-validate all open documents
+  documents.all().forEach((doc) => validateDocument(doc, 'onChange'));
+});
+
 /**
  * Validate document and send diagnostics.
  * Uses tree-sitter when available for syntax error detection,
- * with additional semantic validations.
+ * with additional semantic validations and optional mfuse validation.
  */
-async function validateDocument(document: TextDocument): Promise<void> {
+async function validateDocument(
+  document: TextDocument,
+  trigger: 'onSave' | 'onChange'
+): Promise<void> {
   const diagnostics: Diagnostic[] = [];
   const uri = document.uri;
   const tree = documentManager.getTree(uri);
@@ -168,6 +283,22 @@ async function validateDocument(document: TextDocument): Promise<void> {
   } else {
     // Fallback to regex-based validation
     validateWithRegex(document, diagnostics);
+  }
+
+  // Run mfuse validation if configured and trigger matches
+  if (mfuseConfig.execPath && mfuseConfig.trigger !== 'disabled') {
+    const shouldRunMfuse =
+      mfuseConfig.trigger === 'onChange' ||
+      (mfuseConfig.trigger === 'onSave' && trigger === 'onSave');
+
+    if (shouldRunMfuse) {
+      try {
+        const mfuseDiagnostics = await validateWithMfuse(document, mfuseConfig);
+        diagnostics.push(...mfuseDiagnostics);
+      } catch (error) {
+        connection.console.warn(`Mfuse validation failed: ${error}`);
+      }
+    }
   }
 
   connection.sendDiagnostics({ uri: document.uri, diagnostics });

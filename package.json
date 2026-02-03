@@ -7,7 +7,8 @@
     "build": "pnpm -r build",
     "clean": "pnpm -r clean",
     "test": "pnpm -r test",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "package": "pnpm --filter morpheus-vscode package"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

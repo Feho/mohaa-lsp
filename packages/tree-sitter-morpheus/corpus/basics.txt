@@ -733,3 +733,45 @@ end
             (primary_expression
               (number)))))
       (end_statement))))
+================================================================================
+While loop
+================================================================================
+
+main:
+  while (local.i < 10)
+  {
+    println local.i
+    local.i++
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (while_statement
+        condition: (parenthesized_expression
+          (binary_expression
+            (primary_expression
+              (scoped_variable
+                scope: (scope_keyword)
+                name: (identifier)))
+            (primary_expression
+              (number))))
+        body: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))
+          (expression_statement
+            (update_expression
+              (primary_expression
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))))
+      (end_statement))))

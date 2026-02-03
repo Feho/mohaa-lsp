@@ -97,6 +97,20 @@
 		"class": ["ScriptThread"],
 		"gamever": ["Reborn", "NightFall"]
 	},
+	"curl_get": {
+		"syntax": "curl_get( String url, String/Array callback, [ Var userdata ] )",
+		"description": "Performs an HTTP GET request to the specified URL.\nWhen the request completes, the callback script/thread is invoked with the response.\n\nThe callback receives the following parameters:\n- local.status: HTTP status code (e.g., 200, 404)\n- local.body: Response body as a string\n- local.userdata: The userdata passed to curl_get\n\nReturns 0 on success, non-zero on error.",
+		"example": "curl_get \"https://api.example.com/data\" global/http.scr::on_response local.mydata\n\n// Callback handler:\non_response local.status local.body local.userdata:\n    if (local.status == 200)\n        println \"Got response: \" + local.body\n    end\nend",
+		"class": ["ScriptThread"],
+		"gamever": ["NightFall"]
+	},
+	"curl_post": {
+		"syntax": "curl_post( String url, String data, String/Array callback, [ Var userdata ] )",
+		"description": "Performs an HTTP POST request to the specified URL with the given data.\nWhen the request completes, the callback script/thread is invoked with the response.\n\nThe callback receives the following parameters:\n- local.status: HTTP status code (e.g., 200, 404)\n- local.body: Response body as a string\n- local.userdata: The userdata passed to curl_post\n\nReturns 0 on success, non-zero on error.",
+		"example": "local.json = \"{\\\"name\\\": \\\"test\\\"}\"\ncurl_post \"https://api.example.com/submit\" local.json global/http.scr::on_response local.mydata\n\n// Callback handler:\non_response local.status local.body local.userdata:\n    if (local.status == 200)\n        println \"POST successful: \" + local.body\n    end\nend",
+		"class": ["ScriptThread"],
+		"gamever": ["NightFall"]
+	},
 	"create_api_request": {
 		"syntax": "create_api_request(String url, String method, String/Array scriptname, Var userdata)",
 		"description": "Creates an http request from the server to url/method combination.\nCalls script after request is done.\nMore info at <a href='https://github.com/mohabhassan/NightFall/blob/master/docs/scriptallfuncs.md#create_api_request' title='https://github.com/mohabhassan/NightFall'>NightFall Documentation</a>\n\n<code>local.result</code> will have one of the following values:\n0 = Request queued successfully\n1 = Invalid arguments\n2 = Client api is not running\n3 = Client api error",
@@ -573,6 +587,13 @@
 		"class": ["ScriptThread"],
 		"gamever": ["Reborn", "NightFall"]
 	},
+	"sha256_string": {
+		"syntax": "sha256_string( String text )",
+		"description": "Returns the SHA256 hash of the input string as a hexadecimal string.",
+		"example": "local.hash = sha256_string \"my secret data\"\nprintln \"SHA256: \" + local.hash",
+		"class": ["ScriptThread"],
+		"gamever": ["NightFall"]
+	},
 	"sin": {
 		"syntax": "sin( Float x )",
 		"description": "<b>Reborn</b>: Returns the sine of an angle of x radians.\n\n<b>Breakthrough</b>:  Sine of float (expects degrees not radians).",
@@ -649,6 +670,13 @@
 		"example": "local.result = unregisterev \"connected\"",
 		"class": ["ScriptThread"],
 		"gamever": ["Reborn", "NightFall"]
+	},
+	"uuid_string": {
+		"syntax": "uuid_string()",
+		"description": "Generates and returns a random UUID v4 string using standard C++17 random generation.\nFormat: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx where x is a random hex digit and y is one of 8, 9, a, or b.",
+		"example": "local.id = uuid_string\nprintln \"Generated UUID: \" + local.id\n// Output example: \"550e8400-e29b-41d4-a716-446655440000\"",
+		"class": ["ScriptThread"],
+		"gamever": ["NightFall"]
 	},
 	"userinfo": {
 		"syntax": "userinfo",
