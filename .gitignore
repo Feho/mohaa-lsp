@@ -6,11 +6,12 @@ package-lock.json
 dist/
 build/
 *.node
-*.wasm
-*.map
 
-# Tree-sitter (keep src/ committed for pre-generated parser)
-# NOTE: Run `pnpm --filter tree-sitter-morpheus generate` after grammar.js changes
+# Generated files in dist (but keep grammar/*.wasm)
+dist/**/*.wasm
+
+# Tree-sitter (keep grammar/src/ committed for pre-generated parser)
+# NOTE: Run `tree-sitter generate` in grammar/ after grammar.js changes
 
 # IDE
 .vscode/

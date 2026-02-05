@@ -1,20 +1,127 @@
 {
-  "name": "mohaa-lsp-monorepo",
+  "name": "vscode-morpheus",
+  "displayName": "Morpheus Script",
+  "description": "Language support for MOHAA Morpheus Script (.scr) - completions, navigation, diagnostics, and more",
   "version": "0.1.0",
-  "private": true,
-  "description": "Language Server Protocol implementation for MOHAA Morpheus Script",
+  "publisher": "mohaa-community",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mohaa-community/mohaa-lsp"
+  },
+  "bugs": {
+    "url": "https://github.com/mohaa-community/mohaa-lsp/issues"
+  },
+  "homepage": "https://github.com/mohaa-community/mohaa-lsp#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "mohaa",
+    "morpheus",
+    "scr",
+    "medal of honor",
+    "lsp",
+    "language-server",
+    "spearhead",
+    "breakthrough",
+    "reborn",
+    "nightfall",
+    "opm",
+    "openmohaa"
+  ],
+  "activationEvents": [
+    "onLanguage:morpheus"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "morpheus",
+        "aliases": [
+          "Morpheus Script",
+          "morpheus",
+          "scr",
+          "mohaa script"
+        ],
+        "extensions": [
+          ".scr"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "morpheus",
+        "scopeName": "source.morpheus",
+        "path": "./syntaxes/morpheus.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Morpheus Script",
+      "properties": {
+        "morpheus.gameVersion": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "AA",
+              "SH",
+              "BT",
+              "Reborn",
+              "NightFall",
+              "openmohaa",
+              "OPM",
+              "mohaa script"
+            ]
+          },
+          "default": [
+            "AA",
+            "SH",
+            "BT",
+            "OPM"
+          ],
+          "description": "Game versions to enable completions for"
+        },
+        "morpheus.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server"
+        }
+      }
+    }
+  },
   "scripts": {
-    "build": "pnpm -r build",
-    "clean": "pnpm -r clean",
-    "test": "pnpm -r test",
-    "lint": "pnpm -r lint",
-    "package": "pnpm run build && pnpm --filter vscode-morpheus package",
-    "release": "pnpm run build && pnpm --filter vscode-morpheus publish"
+    "build": "npm run build:server && npm run build:extension",
+    "build:server": "esbuild src/server/server.ts --bundle --outfile=dist/server/server.js --platform=node --format=cjs --external:web-tree-sitter",
+    "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "copy-assets": "mkdir -p dist/server/data && cp src/server/data/*.json dist/server/data/ && cp grammar/*.wasm dist/server/ && cp node_modules/web-tree-sitter/tree-sitter.wasm dist/server/",
+    "watch": "npm run build -- --watch",
+    "package": "npm run build && npm run copy-assets && vsce package --no-dependencies --allow-missing-repository",
+    "publish": "vsce publish --no-dependencies",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.11",
+    "vscode-uri": "^3.0.8",
+    "web-tree-sitter": "^0.22.1"
   },
   "devDependencies": {
+    "@types/node": "^20.10.5",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.19.10",
     "typescript": "^5.3.3"
-  },
-  "engines": {
-    "node": ">=18.0.0"
   }
 }

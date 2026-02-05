@@ -7,28 +7,26 @@ Language Server Protocol implementation for MOHAA Morpheus Script (.scr files).
 - **Completions**: 1,279 built-in functions + 94 Reborn/NightFall functions
 - **Hover**: Function documentation with syntax, description, examples
 - **Go to Definition**: Thread and label navigation
-- **Find References**: Variable and thread usage
+- **Find References**: Variable and thread usage across workspace
 - **Document Symbols**: Thread and label outline
+- **Workspace Symbols**: Search symbols across all files
+- **Rename Symbol**: Rename variables, threads, and labels
+- **Call Hierarchy**: View incoming/outgoing call relationships
+- **Semantic Tokens**: Enhanced syntax highlighting
+- **Inlay Hints**: Parameter name hints for function calls
+- **Signature Help**: Parameter info while typing
+- **Code Lens**: Reference counts for functions
 - **Diagnostics**: Basic syntax validation
-
-## Packages
-
-| Package | Description |
-|---------|-------------|
-| `tree-sitter-morpheus` | Tree-sitter grammar for Morpheus Script |
-| `morpheus-lsp` | Language Server implementation |
-| `vscode-morpheus` | VS Code extension |
 
 ## Installation
 
 ### VS Code
 
-Install from the VS Code marketplace (search for "Morpheus Script") or:
+Install from the VS Code marketplace (search for "Morpheus Script") or build from source:
 
 ```bash
-cd packages/vscode-morpheus
-pnpm install
-pnpm run package
+npm install
+npm run package
 code --install-extension vscode-morpheus-*.vsix
 ```
 
@@ -40,45 +38,37 @@ See [editors/neovim/README.md](editors/neovim/README.md).
 
 See [editors/claude-code/README.md](editors/claude-code/README.md).
 
-### Global CLI
-
-```bash
-pnpm add -g morpheus-lsp
-```
-
 ## Development
 
 ### Prerequisites
 
 - Node.js 18+
-- pnpm
+- npm
 
 ### Setup
 
 ```bash
 # Install dependencies
-pnpm install
+npm install
 
-# Build all packages
-pnpm build
+# Build server and extension
+npm run build
 
-# Run tests
-pnpm test
+# Create VS Code extension package
+npm run package
 ```
 
 ### Tree-sitter Grammar
 
+The tree-sitter grammar is in `grammar/`. The parser is pre-generated (`grammar/src/parser.c`) and compiled to WASM (`grammar/tree-sitter-morpheus.wasm`).
+
+To modify the grammar:
+
 ```bash
-cd packages/tree-sitter-morpheus
-
-# Generate parser
-pnpm run generate
-
-# Run tests
-pnpm run test
-
-# Parse a file
-pnpm run parse path/to/file.scr
+cd grammar
+npm install -g tree-sitter-cli
+tree-sitter generate
+tree-sitter build --wasm
 ```
 
 ## Game Version Support
@@ -91,19 +81,21 @@ Functions are tagged with game version compatibility:
 - **Reborn**: Reborn community patch
 - **NightFall**: NightFall community patch
 
-Configure which versions to enable in your editor settings.
+Configure which versions to enable in VS Code settings (`morpheus.gameVersion`).
 
 ## Architecture
 
 ```
 mohaa-lsp/
-├── packages/
-│   ├── tree-sitter-morpheus/   # Grammar
-│   ├── morpheus-lsp/           # Server
-│   └── vscode-morpheus/        # VS Code
-└── editors/
-    ├── neovim/                 # Neovim config
-    └── claude-code/            # Claude Code config
+├── src/
+│   ├── extension.ts           # VS Code extension
+│   └── server/                # LSP server
+│       ├── capabilities/      # LSP feature providers
+│       ├── data/              # Function databases
+│       └── parser/            # Document parsing
+├── grammar/                   # Tree-sitter grammar
+├── syntaxes/                  # TextMate grammar
+└── editors/                   # Other editor configs
 ```
 
 ## License
