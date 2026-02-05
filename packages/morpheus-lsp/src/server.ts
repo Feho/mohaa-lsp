@@ -22,6 +22,14 @@ import {
   Position,
   Diagnostic,
   DiagnosticSeverity,
+  CodeLens,
+  CodeLensParams,
+  RenameParams,
+  PrepareRenameParams,
+  WorkspaceEdit,
+  TextEdit,
+  DeclarationParams,
+  ReferenceParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -31,19 +39,29 @@ import { functionDb } from './data/database';
 import { CompletionProvider } from './capabilities/completion';
 import { HoverProvider } from './capabilities/hover';
 import { DefinitionProvider } from './capabilities/definition';
+import { ReferencesProvider } from './capabilities/references';
+import { RenameProvider } from './capabilities/rename';
+import { CodeLensProvider } from './capabilities/codeLens';
+import { StaticAnalyzer } from './capabilities/staticAnalyzer';
 import { DocumentManager } from './parser/documentManager';
+import { SymbolIndex } from './parser/symbolIndex';
 
 // Create connection using Node IPC
 const connection = createConnection(ProposedFeatures.all);
 
-// Document manager
+// Document manager and symbol index
 const documents = new TextDocuments(TextDocument);
 const documentManager = new DocumentManager();
+const symbolIndex = new SymbolIndex();
 
 // Capability providers
 let completionProvider: CompletionProvider;
 let hoverProvider: HoverProvider;
 let definitionProvider: DefinitionProvider;
+let referencesProvider: ReferencesProvider;
+let renameProvider: RenameProvider;
+let codeLensProvider: CodeLensProvider;
+let staticAnalyzer: StaticAnalyzer;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   // Load function database
@@ -53,6 +71,20 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   completionProvider = new CompletionProvider(functionDb);
   hoverProvider = new HoverProvider(functionDb);
   definitionProvider = new DefinitionProvider(documentManager);
+  referencesProvider = new ReferencesProvider(symbolIndex);
+  renameProvider = new RenameProvider(symbolIndex);
+  codeLensProvider = new CodeLensProvider(symbolIndex);
+  staticAnalyzer = new StaticAnalyzer(symbolIndex, functionDb);
+
+  // Set workspace folders for cross-file navigation
+  if (params.workspaceFolders) {
+    const folders = params.workspaceFolders.map(f => URI.parse(f.uri).fsPath);
+    definitionProvider.setWorkspaceFolders(folders);
+  } else if (params.rootUri) {
+    definitionProvider.setWorkspaceFolders([URI.parse(params.rootUri).fsPath]);
+  } else if (params.rootPath) {
+    definitionProvider.setWorkspaceFolders([params.rootPath]);
+  }
 
   connection.console.log('Morpheus LSP initialized');
 
@@ -65,9 +97,16 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
       },
       hoverProvider: true,
       definitionProvider: true,
+      declarationProvider: true,
       referencesProvider: true,
       documentSymbolProvider: true,
       workspaceSymbolProvider: true,
+      renameProvider: {
+        prepareProvider: true,
+      },
+      codeLensProvider: {
+        resolveProvider: true,
+      },
     },
   };
 });
@@ -79,16 +118,19 @@ connection.onInitialized(() => {
 // Document lifecycle
 documents.onDidOpen((event) => {
   documentManager.openDocument(event.document);
+  symbolIndex.indexDocument(event.document);
   validateDocument(event.document);
 });
 
 documents.onDidChangeContent((event) => {
   documentManager.updateDocument(event.document);
+  symbolIndex.indexDocument(event.document);
   validateDocument(event.document);
 });
 
 documents.onDidClose((event) => {
   documentManager.closeDocument(event.document.uri);
+  symbolIndex.removeDocument(event.document.uri);
   connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
 
@@ -117,11 +159,48 @@ connection.onDefinition((params) => {
   return definitionProvider.provideDefinition(document, params.position);
 });
 
+// Go to declaration
+connection.onDeclaration((params: DeclarationParams) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return referencesProvider.findDeclaration(document, params.position);
+});
+
 // Find references
-connection.onReferences((params) => {
+connection.onReferences((params: ReferenceParams) => {
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
-  return definitionProvider.findReferences(document, params.position);
+  return referencesProvider.findReferences(
+    document,
+    params.position,
+    params.context?.includeDeclaration ?? true
+  );
+});
+
+// Prepare rename
+connection.onPrepareRename((params: PrepareRenameParams) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return renameProvider.prepareRename(document, params.position);
+});
+
+// Rename symbol
+connection.onRenameRequest((params: RenameParams) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return renameProvider.rename(document, params.position, params.newName);
+});
+
+// CodeLens
+connection.onCodeLens((params: CodeLensParams): CodeLens[] => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return codeLensProvider.provideCodeLenses(document);
+});
+
+// CodeLens resolve
+connection.onCodeLensResolve((codeLens: CodeLens): CodeLens => {
+  return codeLensProvider.resolveCodeLens(codeLens);
 });
 
 // Document symbols
@@ -381,6 +460,12 @@ async function validateDocument(document: TextDocument): Promise<void> {
       message: `Unclosed '${bracket.char}' - expected '${closeChar}'`,
       source: 'morpheus-lsp',
     });
+  }
+
+  // Run static analysis for additional diagnostics
+  if (staticAnalyzer) {
+    const analyzerDiagnostics = staticAnalyzer.analyze(document);
+    diagnostics.push(...analyzerDiagnostics);
   }
 
   connection.sendDiagnostics({ uri: document.uri, diagnostics });
