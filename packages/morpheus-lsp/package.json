@@ -7,8 +7,9 @@
     "morpheus-lsp": "./dist/server.js"
   },
   "scripts": {
-    "build": "tsc && cp -r src/data dist/",
-    "watch": "tsc -w",
+    "build": "esbuild src/server.ts --bundle --outfile=dist/server.js --platform=node --format=cjs --external:web-tree-sitter && mkdir -p dist/data && cp src/data/*.json dist/data/",
+    "build:tsc": "tsc",
+    "watch": "npm run build -- --watch",
     "clean": "rm -rf dist",
     "lint": "eslint src --ext .ts",
     "test": "vitest"
@@ -21,6 +22,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.10.5",
+    "esbuild": "^0.19.10",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
   },

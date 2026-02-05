@@ -20,15 +20,14 @@
     "src/**"
   ],
   "scripts": {
-    "build": "tree-sitter generate && node-gyp build",
+    "build": "echo 'Using pre-generated parser'",
+    "build:native": "tree-sitter generate && node-gyp build",
+    "build:wasm": "tree-sitter build --wasm",
     "generate": "tree-sitter generate",
     "test": "tree-sitter test",
     "parse": "tree-sitter parse"
   },
-  "dependencies": {
-    "node-addon-api": "^7.0.0",
-    "node-gyp-build": "^4.6.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "tree-sitter-cli": "^0.22.1"
   },

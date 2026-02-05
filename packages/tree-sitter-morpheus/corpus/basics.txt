@@ -11,7 +11,7 @@ end
   (thread_definition
     name: (identifier)
     body: (block
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 Thread with parameters
@@ -41,7 +41,7 @@ end
             (scoped_variable
               scope: (scope_keyword)
               name: (identifier)))))
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 Variable assignment
@@ -83,7 +83,7 @@ end
           operator: (MISSING "=")
           right: (primary_expression
             (number))))
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 If statement
@@ -129,7 +129,7 @@ end
               arguments: (argument_list
                 (primary_expression
                   (string)))))))
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 Entity reference
@@ -157,7 +157,7 @@ end
             (primary_expression
               (string)))
           function: (identifier)))
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 Const array
@@ -188,7 +188,7 @@ end
               (number))
             (primary_expression
               (string)))))
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 For loop
@@ -240,7 +240,7 @@ end
                 (scoped_variable
                   scope: (scope_keyword)
                   name: (identifier)))))))
-      (end_statement))))
+      (return_statement))))
 
 ================================================================================
 Switch statement
@@ -297,4 +297,4 @@ end
               arguments: (argument_list
                 (primary_expression
                   (string)))))))
-      (end_statement))))
+      (return_statement))))

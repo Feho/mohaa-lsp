@@ -14,9 +14,9 @@ import {
 let client: LanguageClient | undefined;
 
 export async function activate(context: ExtensionContext): Promise<void> {
-  // Path to the language server
+  // Path to the language server (bundled in dist/server/)
   const serverModule = context.asAbsolutePath(
-    path.join('..', 'morpheus-lsp', 'dist', 'server.js')
+    path.join('dist', 'server', 'server.js')
   );
 
   // Server options

@@ -26,8 +26,22 @@ module.exports = grammar({
   word: $ => $.identifier,
 
   conflicts: $ => [
-    [$.call_expression, $.binary_expression],
-    [$.primary_expression, $.assignment_expression],
+    // Function call ambiguity: `target func arg` vs `target (func arg)`
+    [$.primary_expression, $.call_expression],
+    [$.call_expression, $.call_expression],
+    // Ternary in argument list: `func x ? y : z` ambiguity
+    [$.ternary_expression, $.argument_list],
+    [$.ternary_expression, $.const_array],
+    // Const array in argument list
+    [$.argument_list, $.const_array],
+    // Parameter list vs expression
+    [$.parameter_list, $.primary_expression],
+    // Statement boundaries
+    [$.argument_list, $.argument_list],
+    [$.labeled_statement, $.block],
+    [$.block, $.block],
+    [$.const_array, $.const_array],
+    [$.switch_case, $.break_statement],
   ],
 
   rules: {
@@ -48,7 +62,6 @@ module.exports = grammar({
       $.break_statement,
       $.continue_statement,
       $.goto_statement,
-      $.end_statement,
       $.expression_statement,
       $.empty_statement,
     ),
@@ -64,11 +77,11 @@ module.exports = grammar({
     parameter_list: $ => repeat1($.scoped_variable),
 
     // Labeled statement for goto targets
-    labeled_statement: $ => seq(
+    labeled_statement: $ => prec.right(seq(
       field('label', $.identifier),
       ':',
       optional($._statement),
-    ),
+    )),
 
     // Block of statements (implicit via end or next thread)
     block: $ => repeat1($._statement),
@@ -76,11 +89,11 @@ module.exports = grammar({
     // Empty statement
     empty_statement: $ => ';',
 
-    // Expression statement
-    expression_statement: $ => seq(
+    // Expression statement - semicolons are optional in Morpheus script
+    expression_statement: $ => prec.left(seq(
       $._expression,
       optional(';'),
-    ),
+    )),
 
     // if/else statement
     if_statement: $ => prec.right(seq(
@@ -150,11 +163,9 @@ module.exports = grammar({
       field('handler', $.block_or_statement),
     ),
 
-    // return/end
-    return_statement: $ => seq(
-      'end',
-      optional(field('value', $._expression)),
-    ),
+    // return/end - the 'end' keyword ends a thread
+    // Note: return values (end local.x) are parsed as a separate expression_statement followed by end
+    return_statement: $ => 'end',
 
     break_statement: $ => 'break',
     continue_statement: $ => 'continue',
@@ -163,8 +174,6 @@ module.exports = grammar({
       'goto',
       field('label', $.identifier),
     ),
-
-    end_statement: $ => 'end',
 
     // ==================== EXPRESSIONS ====================
 

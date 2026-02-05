@@ -30,6 +30,28 @@ import {
   TextEdit,
   DeclarationParams,
   ReferenceParams,
+  SemanticTokensParams,
+  SemanticTokensRangeParams,
+  SemanticTokensBuilder,
+  InlayHintParams,
+  InlayHint,
+  LinkedEditingRangeParams,
+  LinkedEditingRanges,
+  FoldingRangeParams,
+  FoldingRange,
+  SelectionRangeParams,
+  SelectionRange,
+  CallHierarchyPrepareParams,
+  CallHierarchyItem,
+  CallHierarchyIncomingCallsParams,
+  CallHierarchyIncomingCall,
+  CallHierarchyOutgoingCallsParams,
+  CallHierarchyOutgoingCall,
+  DocumentLinkParams,
+  DocumentLink,
+  CodeActionParams,
+  CodeAction,
+  ExecuteCommandParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -46,6 +68,22 @@ import { StaticAnalyzer } from './capabilities/staticAnalyzer';
 import { DocumentManager } from './parser/documentManager';
 import { SymbolIndex } from './parser/symbolIndex';
 
+// New capability imports
+import { SemanticTokensProvider, TOKEN_TYPES, TOKEN_MODIFIERS } from './capabilities/semanticTokens';
+import { InlayHintsProvider } from './capabilities/inlayHints';
+import { LinkedEditingRangesProvider } from './capabilities/linkedEditingRanges';
+import { FoldingRangesProvider } from './capabilities/foldingRanges';
+import { SelectionRangesProvider } from './capabilities/selectionRanges';
+import { CallHierarchyProvider } from './capabilities/callHierarchy';
+import { DocumentLinksProvider } from './capabilities/documentLinks';
+import { AdvancedCodeActionsProvider, REFACTORING_COMMANDS } from './capabilities/advancedCodeActions';
+import { EnhancedCodeLensProvider, ENHANCED_CODELENS_COMMANDS } from './capabilities/enhancedCodeLens';
+import { DataFlowAnalyzer } from './capabilities/dataFlowAnalyzer';
+import { DependencyGraphProvider, DEPENDENCY_COMMANDS } from './capabilities/dependencyGraph';
+import { ProjectHealthProvider, PROJECT_HEALTH_COMMANDS } from './capabilities/projectHealth';
+import { globalMetrics, PERFORMANCE_COMMANDS } from './capabilities/performanceMetrics';
+import { SymbolUsageClassifier } from './capabilities/symbolUsageClassification';
+
 // Create connection using Node IPC
 const connection = createConnection(ProposedFeatures.all);
 
@@ -54,7 +92,7 @@ const documents = new TextDocuments(TextDocument);
 const documentManager = new DocumentManager();
 const symbolIndex = new SymbolIndex();
 
-// Capability providers
+// Core capability providers
 let completionProvider: CompletionProvider;
 let hoverProvider: HoverProvider;
 let definitionProvider: DefinitionProvider;
@@ -63,11 +101,28 @@ let renameProvider: RenameProvider;
 let codeLensProvider: CodeLensProvider;
 let staticAnalyzer: StaticAnalyzer;
 
+// Extended capability providers
+let semanticTokensProvider: SemanticTokensProvider;
+let inlayHintsProvider: InlayHintsProvider;
+let linkedEditingRangesProvider: LinkedEditingRangesProvider;
+let foldingRangesProvider: FoldingRangesProvider;
+let selectionRangesProvider: SelectionRangesProvider;
+let callHierarchyProvider: CallHierarchyProvider;
+let documentLinksProvider: DocumentLinksProvider;
+let advancedCodeActionsProvider: AdvancedCodeActionsProvider;
+let enhancedCodeLensProvider: EnhancedCodeLensProvider;
+let dataFlowAnalyzer: DataFlowAnalyzer;
+let dependencyGraphProvider: DependencyGraphProvider;
+let projectHealthProvider: ProjectHealthProvider;
+let symbolUsageClassifier: SymbolUsageClassifier;
+
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
+  const timerId = globalMetrics.startTimer('initialize');
+
   // Load function database
   await functionDb.load();
 
-  // Initialize providers
+  // Initialize core providers
   completionProvider = new CompletionProvider(functionDb);
   hoverProvider = new HoverProvider(functionDb);
   definitionProvider = new DefinitionProvider(documentManager);
@@ -76,17 +131,48 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   codeLensProvider = new CodeLensProvider(symbolIndex);
   staticAnalyzer = new StaticAnalyzer(symbolIndex, functionDb);
 
+  // Initialize extended providers
+  semanticTokensProvider = new SemanticTokensProvider(symbolIndex, functionDb);
+  inlayHintsProvider = new InlayHintsProvider(symbolIndex, functionDb);
+  linkedEditingRangesProvider = new LinkedEditingRangesProvider();
+  foldingRangesProvider = new FoldingRangesProvider();
+  selectionRangesProvider = new SelectionRangesProvider();
+  callHierarchyProvider = new CallHierarchyProvider(symbolIndex);
+  documentLinksProvider = new DocumentLinksProvider();
+  advancedCodeActionsProvider = new AdvancedCodeActionsProvider(symbolIndex, functionDb);
+  enhancedCodeLensProvider = new EnhancedCodeLensProvider(symbolIndex, functionDb);
+  dataFlowAnalyzer = new DataFlowAnalyzer(symbolIndex);
+  dependencyGraphProvider = new DependencyGraphProvider();
+  projectHealthProvider = new ProjectHealthProvider(symbolIndex, dependencyGraphProvider);
+  symbolUsageClassifier = new SymbolUsageClassifier();
+
   // Set workspace folders for cross-file navigation
+  const workspaceFolders: string[] = [];
   if (params.workspaceFolders) {
-    const folders = params.workspaceFolders.map(f => URI.parse(f.uri).fsPath);
-    definitionProvider.setWorkspaceFolders(folders);
+    workspaceFolders.push(...params.workspaceFolders.map(f => URI.parse(f.uri).fsPath));
+    definitionProvider.setWorkspaceFolders(workspaceFolders);
+    documentLinksProvider.setWorkspaceFolders(workspaceFolders);
   } else if (params.rootUri) {
-    definitionProvider.setWorkspaceFolders([URI.parse(params.rootUri).fsPath]);
+    workspaceFolders.push(URI.parse(params.rootUri).fsPath);
+    definitionProvider.setWorkspaceFolders(workspaceFolders);
+    documentLinksProvider.setWorkspaceFolders(workspaceFolders);
   } else if (params.rootPath) {
-    definitionProvider.setWorkspaceFolders([params.rootPath]);
+    workspaceFolders.push(params.rootPath);
+    definitionProvider.setWorkspaceFolders(workspaceFolders);
+    documentLinksProvider.setWorkspaceFolders(workspaceFolders);
   }
 
   connection.console.log('Morpheus LSP initialized');
+  globalMetrics.endTimer(timerId);
+
+  // Collect all available commands from providers
+  const allCommands = [
+    ...Object.values(REFACTORING_COMMANDS),
+    ...Object.values(ENHANCED_CODELENS_COMMANDS),
+    ...Object.values(DEPENDENCY_COMMANDS),
+    ...Object.values(PROJECT_HEALTH_COMMANDS),
+    ...Object.values(PERFORMANCE_COMMANDS),
+  ];
 
   return {
     capabilities: {
@@ -107,6 +193,39 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
       codeLensProvider: {
         resolveProvider: true,
       },
+      // Extended capabilities
+      semanticTokensProvider: {
+        full: true,
+        range: true,
+        legend: {
+          tokenTypes: [...TOKEN_TYPES],
+          tokenModifiers: [...TOKEN_MODIFIERS],
+        },
+      },
+      inlayHintProvider: {
+        resolveProvider: true,
+      },
+      linkedEditingRangeProvider: true,
+      foldingRangeProvider: true,
+      selectionRangeProvider: true,
+      callHierarchyProvider: true,
+      documentLinkProvider: {
+        resolveProvider: true,
+      },
+      codeActionProvider: {
+        codeActionKinds: [
+          'quickfix',
+          'refactor',
+          'refactor.extract',
+          'refactor.inline',
+          'refactor.move',
+          'source.organizeImports',
+        ],
+        resolveProvider: true,
+      },
+      executeCommandProvider: {
+        commands: allCommands,
+      },
     },
   };
 });
@@ -117,20 +236,29 @@ connection.onInitialized(() => {
 
 // Document lifecycle
 documents.onDidOpen((event) => {
+  const timerId = globalMetrics.startTimer('documentOpen');
   documentManager.openDocument(event.document);
   symbolIndex.indexDocument(event.document);
+  projectHealthProvider.updateDocument(event.document.uri, event.document.getText());
   validateDocument(event.document);
+  globalMetrics.endTimer(timerId);
 });
 
 documents.onDidChangeContent((event) => {
+  const timerId = globalMetrics.startTimer('documentChange');
   documentManager.updateDocument(event.document);
   symbolIndex.indexDocument(event.document);
+  symbolUsageClassifier.clearCache(event.document.uri);
+  projectHealthProvider.updateDocument(event.document.uri, event.document.getText());
   validateDocument(event.document);
+  globalMetrics.endTimer(timerId);
 });
 
 documents.onDidClose((event) => {
   documentManager.closeDocument(event.document.uri);
   symbolIndex.removeDocument(event.document.uri);
+  symbolUsageClassifier.clearCache(event.document.uri);
+  projectHealthProvider.removeDocument(event.document.uri);
   connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
 });
 
@@ -213,6 +341,147 @@ connection.onDocumentSymbol((params) => {
 // Workspace symbols
 connection.onWorkspaceSymbol((params) => {
   return documentManager.searchWorkspaceSymbols(params.query);
+});
+
+// =============================================================================
+// Extended Capability Handlers
+// =============================================================================
+
+// Semantic Tokens - Full Document
+connection.languages.semanticTokens.on((params: SemanticTokensParams) => {
+  const timerId = globalMetrics.startTimer('semanticTokens');
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return { data: [] };
+  
+  const result = semanticTokensProvider.provideSemanticTokens(document);
+  globalMetrics.endTimer(timerId);
+  globalMetrics.recordQuery({ queryType: 'semanticTokens', responseTime: 0, resultCount: result.data.length / 5, cached: false });
+  return result;
+});
+
+// Semantic Tokens - Range
+connection.languages.semanticTokens.onRange((params: SemanticTokensRangeParams) => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return { data: [] };
+  return semanticTokensProvider.provideSemanticTokensRange(document, params.range);
+});
+
+// Inlay Hints
+connection.languages.inlayHint.on((params: InlayHintParams) => {
+  const timerId = globalMetrics.startTimer('inlayHints');
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  
+  const result = inlayHintsProvider.provideInlayHints(document, params.range);
+  globalMetrics.endTimer(timerId);
+  return result;
+});
+
+// Inlay Hint Resolve
+connection.languages.inlayHint.resolve((hint: InlayHint) => {
+  return inlayHintsProvider.resolveInlayHint(hint);
+});
+
+// Linked Editing Ranges
+connection.onRequest('textDocument/linkedEditingRange', (params: LinkedEditingRangeParams): LinkedEditingRanges | null => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return linkedEditingRangesProvider.getLinkedEditingRanges(document, params.position);
+});
+
+// Folding Ranges
+connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return foldingRangesProvider.provideFoldingRanges(document);
+});
+
+// Selection Ranges
+connection.onSelectionRanges((params: SelectionRangeParams): SelectionRange[] => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return selectionRangesProvider.provideSelectionRanges(document, params.positions);
+});
+
+// Call Hierarchy - Prepare
+connection.languages.callHierarchy.onPrepare((params: CallHierarchyPrepareParams): CallHierarchyItem[] | null => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return null;
+  return callHierarchyProvider.prepareCallHierarchy(document, params.position);
+});
+
+// Call Hierarchy - Incoming Calls
+connection.languages.callHierarchy.onIncomingCalls((params: CallHierarchyIncomingCallsParams): CallHierarchyIncomingCall[] => {
+  return callHierarchyProvider.getIncomingCalls(params.item);
+});
+
+// Call Hierarchy - Outgoing Calls
+connection.languages.callHierarchy.onOutgoingCalls((params: CallHierarchyOutgoingCallsParams): CallHierarchyOutgoingCall[] => {
+  return callHierarchyProvider.getOutgoingCalls(params.item);
+});
+
+// Document Links
+connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  return documentLinksProvider.provideDocumentLinks(document);
+});
+
+// Document Link Resolve
+connection.onDocumentLinkResolve((link: DocumentLink): DocumentLink => {
+  return documentLinksProvider.resolveDocumentLink(link);
+});
+
+// Code Actions
+connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
+  const timerId = globalMetrics.startTimer('codeAction');
+  const document = documents.get(params.textDocument.uri);
+  if (!document) return [];
+  
+  const result = advancedCodeActionsProvider.provideCodeActions(document, params.range, params.context.diagnostics);
+  globalMetrics.endTimer(timerId);
+  return result;
+});
+
+// Execute Command
+connection.onExecuteCommand(async (params: ExecuteCommandParams) => {
+  const timerId = globalMetrics.startTimer('executeCommand');
+  
+  try {
+    // Handle dependency commands
+    if (params.command === DEPENDENCY_COMMANDS.SHOW_DEPENDENCY_TREE) {
+      const graph = dependencyGraphProvider.buildGraph();
+      return graph;
+    }
+    
+    if (params.command === DEPENDENCY_COMMANDS.EXPORT_DEPENDENCY_GRAPH) {
+      const graph = dependencyGraphProvider.buildGraph();
+      return graph;
+    }
+    
+    // Handle project health commands
+    if (params.command === PROJECT_HEALTH_COMMANDS.SHOW_HEALTH_REPORT) {
+      return projectHealthProvider.getHealthReport();
+    }
+    
+    if (params.command === PROJECT_HEALTH_COMMANDS.ANALYZE_PROJECT) {
+      return projectHealthProvider.analyzeProject();
+    }
+    
+    // Handle performance commands
+    if (params.command === PERFORMANCE_COMMANDS.SHOW_METRICS) {
+      return globalMetrics.getReportMarkdown();
+    }
+    
+    if (params.command === PERFORMANCE_COMMANDS.RESET_METRICS) {
+      globalMetrics.reset();
+      return { success: true };
+    }
+    
+    return null;
+  } finally {
+    globalMetrics.endTimer(timerId);
+  }
 });
 
 /**
@@ -467,6 +736,21 @@ async function validateDocument(document: TextDocument): Promise<void> {
     const analyzerDiagnostics = staticAnalyzer.analyze(document);
     diagnostics.push(...analyzerDiagnostics);
   }
+
+  // Run data flow analysis
+  if (dataFlowAnalyzer) {
+    const dataFlowDiagnostics = dataFlowAnalyzer.analyze(document);
+    diagnostics.push(...dataFlowDiagnostics);
+  }
+
+  // Record parse metrics
+  globalMetrics.recordParse({
+    fileUri: document.uri,
+    parseTime: 0, // Would need actual timing
+    fileSize: text.length,
+    lineCount: lines.length,
+    symbolCount: symbolIndex.getSymbolsInFile(document.uri).length,
+  });
 
   connection.sendDiagnostics({ uri: document.uri, diagnostics });
 }

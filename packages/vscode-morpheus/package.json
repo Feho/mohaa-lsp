@@ -1,9 +1,19 @@
 {
   "name": "vscode-morpheus",
   "displayName": "Morpheus Script",
-  "description": "Language support for MOHAA Morpheus Script (.scr)",
+  "description": "Language support for MOHAA Morpheus Script (.scr) - completions, navigation, diagnostics, and more",
   "version": "0.1.0",
   "publisher": "mohaa-community",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mohaa-community/mohaa-lsp"
+  },
+  "bugs": {
+    "url": "https://github.com/mohaa-community/mohaa-lsp/issues"
+  },
+  "homepage": "https://github.com/mohaa-community/mohaa-lsp#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -78,10 +88,11 @@
     }
   },
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && npm run copy-server",
+    "copy-server": "mkdir -p dist/server/data && cp ../morpheus-lsp/dist/server.js dist/server/ && cp ../morpheus-lsp/dist/data/*.json dist/server/data/ && cp ../tree-sitter-morpheus/*.wasm dist/server/ && cp ../../node_modules/.pnpm/web-tree-sitter@*/node_modules/web-tree-sitter/tree-sitter.wasm dist/server/",
     "watch": "npm run build -- --watch",
-    "package": "vsce package",
-    "publish": "vsce publish"
+    "package": "vsce package --no-dependencies --allow-missing-repository",
+    "publish": "vsce publish --no-dependencies"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

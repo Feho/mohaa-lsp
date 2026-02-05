@@ -313,6 +313,31 @@ export class SymbolIndex {
   }
 
   /**
+   * Alias for getDocumentSymbols
+   */
+  getSymbolsInFile(uri: string): IndexedSymbol[] {
+    return this.getDocumentSymbols(uri);
+  }
+
+  /**
+   * Get all symbols across the entire workspace
+   */
+  getAllSymbols(): IndexedSymbol[] {
+    const allSymbols: IndexedSymbol[] = [];
+    for (const defs of this.symbolDefinitions.values()) {
+      allSymbols.push(...defs);
+    }
+    return allSymbols;
+  }
+
+  /**
+   * Get a specific symbol by name (returns first match)
+   */
+  getSymbol(name: string): IndexedSymbol | undefined {
+    return this.findDefinition(name);
+  }
+
+  /**
    * Get all indexed documents
    */
   getIndexedDocuments(): string[] {

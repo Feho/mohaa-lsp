@@ -43,12 +43,12 @@ jobs:
         run: pnpm build
       
       - name: Package VS Code extension
-        run: pnpm --filter morpheus-vscode package
+        run: pnpm --filter vscode-morpheus package
       
       - name: Publish to VS Code Marketplace
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: pnpm --filter morpheus-vscode publish
+        run: pnpm --filter vscode-morpheus publish
       
       - name: Find VSIX file
         id: find-vsix
