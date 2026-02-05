@@ -18,3 +18,4 @@ pnpm-workspace.yaml
 *.md
 !README.md
 !CHANGELOG.md
+CLAUDE.md
