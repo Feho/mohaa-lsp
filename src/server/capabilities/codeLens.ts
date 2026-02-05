@@ -31,7 +31,7 @@ export interface CodeLensConfig {
 
 const DEFAULT_CONFIG: CodeLensConfig = {
   showReferenceCounts: true,
-  showLabelReferences: true,
+  showLabelReferences: false, // Disabled to avoid duplicate lenses
   showVariableReferences: false, // Variables can be noisy
   minReferenceCount: 0,
 };
@@ -88,8 +88,8 @@ export class CodeLensProvider {
     
     codeLens.command = {
       title,
-      command: 'morpheus.findReferences',
-      arguments: [uri, codeLens.range.start, symbolName],
+      command: refCount > 0 ? 'editor.action.findReferences' : '',
+      arguments: refCount > 0 ? [uri, codeLens.range.start] : undefined,
     };
 
     return codeLens;

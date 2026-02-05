@@ -381,12 +381,87 @@ export class StaticAnalyzer {
     return diagnostics;
   }
 
+  private getCommentRanges(text: string): Map<number, Array<[number, number]>> {
+    const ranges = new Map<number, Array<[number, number]>>();
+    const lines = text.split('\n');
+    let inBlockComment = false;
+    let blockStartLine = 0;
+    let blockStartChar = 0;
+
+    const addRange = (line: number, start: number, end: number) => {
+      const lineRanges = ranges.get(line) ?? [];
+      lineRanges.push([start, end]);
+      ranges.set(line, lineRanges);
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      let j = 0;
+      let inString = false;
+
+      while (j < line.length) {
+        const ch = line[j];
+        const next = line[j + 1];
+
+        if (inBlockComment) {
+          const endIdx = line.indexOf('*/', j);
+          const start = i === blockStartLine ? blockStartChar : 0;
+
+          if (endIdx === -1) {
+            addRange(i, start, line.length);
+            break;
+          }
+
+          addRange(i, start, endIdx + 2);
+          inBlockComment = false;
+          j = endIdx + 2;
+          continue;
+        }
+
+        if (ch === '"' && (j === 0 || line[j - 1] !== '\\')) {
+          inString = !inString;
+          j++;
+          continue;
+        }
+
+        if (!inString && ch === '/' && next === '/') {
+          addRange(i, j, line.length);
+          break;
+        }
+
+        if (!inString && ch === '/' && next === '*') {
+          inBlockComment = true;
+          blockStartLine = i;
+          blockStartChar = j;
+          j += 2;
+          continue;
+        }
+
+        j++;
+      }
+    }
+
+    return ranges;
+  }
+
+  private isInComment(
+    commentRanges: Map<number, Array<[number, number]>>,
+    line: number,
+    index: number
+  ): boolean {
+    const ranges = commentRanges.get(line);
+    if (!ranges) return false;
+
+    return ranges.some(([start, end]) => index >= start && index < end);
+  }
+
   /**
    * Check for unknown function calls
    */
   private checkUnknownFunctions(text: string, uri: string, document: TextDocument): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const lines = text.split('\n');
+    const commentRanges = this.getCommentRanges(text);
 
     // Known keywords and built-ins to ignore
     const ignored = new Set([
@@ -405,7 +480,12 @@ export class StaticAnalyzer {
       
       for (const match of funcCallMatches) {
         const funcName = match[1];
-        
+        const startChar = match.index!;
+
+        if (this.isInComment(commentRanges, i, startChar)) {
+          continue;
+        }
+
         // Skip ignored keywords
         if (ignored.has(funcName.toLowerCase())) {
           continue;
@@ -418,7 +498,6 @@ export class StaticAnalyzer {
         const isThread = this.symbolIndex.findDefinition(funcName) !== undefined;
         
         if (!isKnown && !isThread) {
-          const startChar = match.index!;
           diagnostics.push({
             severity: DiagnosticSeverity.Information,
             range: {

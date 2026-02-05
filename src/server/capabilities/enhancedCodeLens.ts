@@ -320,7 +320,7 @@ export class EnhancedCodeLensProvider {
 
     codeLens.command = {
       title: count === 0 ? 'no references' : `${count} reference${count !== 1 ? 's' : ''}`,
-      command: count > 0 ? 'morpheus.findReferences' : '',
+      command: count > 0 ? 'editor.action.findReferences' : '',
       arguments: count > 0 ? [data.uri, codeLens.range.start] : undefined,
     };
 

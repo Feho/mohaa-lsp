@@ -376,12 +376,14 @@ export class SymbolIndex {
       // Thread definition pattern: identifier [local.param1 local.param2 ...]:
       // Must be at column 0 (no leading whitespace)
       const isAtColumnZero = line.length > 0 && line[0] !== ' ' && line[0] !== '\t';
+      let isThreadDefinitionLine = false;
       
       if (isAtColumnZero) {
         const threadMatch = /^(\w[\w@#'-]*)\s*((?:(?:local|group)\.\w+\s*)*):/
 .exec(trimmed);
         
         if (threadMatch && !reservedKeywords.has(threadMatch[1])) {
+          isThreadDefinitionLine = true;
           const name = threadMatch[1];
           const paramStr = threadMatch[2].trim();
           const parameters: string[] = [];
@@ -423,7 +425,8 @@ export class SymbolIndex {
       }
       
       // Label inside thread: identifier: (not ::)
-      if (currentThread) {
+      // Skip if this line is a thread definition (already added as Function)
+      if (currentThread && !isThreadDefinitionLine) {
         const labelMatch = /^\s*(\w[\w@#'-]*)\s*:(?!:)/.exec(trimmed);
         if (labelMatch && labelMatch[1] !== 'end') {
           const labelName = labelMatch[1];
