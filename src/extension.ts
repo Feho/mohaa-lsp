@@ -3,7 +3,7 @@
  */
 
 import * as path from 'path';
-import { ExtensionContext, workspace } from 'vscode';
+import { ExtensionContext, workspace, tasks } from 'vscode';
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -11,6 +11,7 @@ import {
   TransportKind,
 } from 'vscode-languageclient/node';
 import { registerOpenMohaaDebug } from './debug/openMohaaDebug';
+import { MorfuseTaskProvider } from './taskProvider';
 
 let client: LanguageClient | undefined;
 
@@ -54,6 +55,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
   );
 
   await client.start();
+
+  // Register the task provider for morfuse validation
+  const taskProvider = new MorfuseTaskProvider();
+  context.subscriptions.push(
+    tasks.registerTaskProvider(MorfuseTaskProvider.TaskType, taskProvider)
+  );
 }
 
 export async function deactivate(): Promise<void> {

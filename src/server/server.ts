@@ -78,6 +78,7 @@ import { CallHierarchyProvider } from './capabilities/callHierarchy';
 import { DocumentLinksProvider } from './capabilities/documentLinks';
 import { AdvancedCodeActionsProvider, REFACTORING_COMMANDS } from './capabilities/advancedCodeActions';
 import { EnhancedCodeLensProvider, ENHANCED_CODELENS_COMMANDS } from './capabilities/enhancedCodeLens';
+import { validateWithMfuse, MfuseValidatorConfig } from './capabilities/mfuseValidator';
 import { DataFlowAnalyzer } from './capabilities/dataFlowAnalyzer';
 import { DependencyGraphProvider, DEPENDENCY_COMMANDS } from './capabilities/dependencyGraph';
 import { ProjectHealthProvider, PROJECT_HEALTH_COMMANDS } from './capabilities/projectHealth';
@@ -115,6 +116,18 @@ let dataFlowAnalyzer: DataFlowAnalyzer;
 let dependencyGraphProvider: DependencyGraphProvider;
 let projectHealthProvider: ProjectHealthProvider;
 let symbolUsageClassifier: SymbolUsageClassifier;
+
+// Mfuse validation configuration
+let mfuseConfig: MfuseValidatorConfig = {
+  execPath: '',
+  commandsPath: '',
+  trigger: 'onSave',
+  enabled: true,
+};
+let validationEnabled = true;
+let codeLensEnabled = true;
+let inlayHintsEnabled = true;
+let dataFlowEnabled = true;
 
 connection.onInitialize(async (params: InitializeParams): Promise<InitializeResult> => {
   const timerId = globalMetrics.startTimer('initialize');
@@ -240,7 +253,7 @@ documents.onDidOpen((event) => {
   documentManager.openDocument(event.document);
   symbolIndex.indexDocument(event.document);
   projectHealthProvider.updateDocument(event.document.uri, event.document.getText());
-  validateDocument(event.document);
+  validateDocument(event.document, 'onChange');
   globalMetrics.endTimer(timerId);
 });
 
@@ -250,8 +263,12 @@ documents.onDidChangeContent((event) => {
   symbolIndex.indexDocument(event.document);
   symbolUsageClassifier.clearCache(event.document.uri);
   projectHealthProvider.updateDocument(event.document.uri, event.document.getText());
-  validateDocument(event.document);
+  validateDocument(event.document, 'onChange');
   globalMetrics.endTimer(timerId);
+});
+
+documents.onDidSave((event) => {
+  validateDocument(event.document, 'onSave');
 });
 
 documents.onDidClose((event) => {
@@ -321,6 +338,7 @@ connection.onRenameRequest((params: RenameParams) => {
 
 // CodeLens
 connection.onCodeLens((params: CodeLensParams): CodeLens[] => {
+  if (!codeLensEnabled) return [];
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
   return codeLensProvider.provideCodeLenses(document);
@@ -368,6 +386,7 @@ connection.languages.semanticTokens.onRange((params: SemanticTokensRangeParams) 
 
 // Inlay Hints
 connection.languages.inlayHint.on((params: InlayHintParams) => {
+  if (!inlayHintsEnabled) return [];
   const timerId = globalMetrics.startTimer('inlayHints');
   const document = documents.get(params.textDocument.uri);
   if (!document) return [];
@@ -484,10 +503,166 @@ connection.onExecuteCommand(async (params: ExecuteCommandParams) => {
   }
 });
 
+// Configuration change handler
+connection.onDidChangeConfiguration((change) => {
+  const settings = change.settings?.morpheus;
+  if (settings) {
+    // Update mfuse configuration
+    if (settings.validation) {
+      mfuseConfig = {
+        execPath: settings.validation.mfusePath || '',
+        commandsPath: settings.paths?.commandsJson || '',
+        trigger: settings.validation.trigger || 'onSave',
+        enabled: settings.validation.enable !== false,
+      };
+      validationEnabled = settings.validation.enable !== false;
+    }
+
+    // Update feature enable/disable flags
+    if (settings.codeLens) {
+      codeLensEnabled = settings.codeLens.enable !== false;
+    }
+    if (settings.inlayHints) {
+      inlayHintsEnabled = settings.inlayHints.enable !== false;
+    }
+    if (settings.dataFlow) {
+      dataFlowEnabled = settings.dataFlow.enable !== false;
+    }
+
+    // Update static analyzer config
+    if (staticAnalyzer && settings.diagnostics) {
+      staticAnalyzer.setConfig({
+        checkUndefinedThreads: settings.diagnostics.checkUndefinedThreads ?? true,
+        checkUndefinedLabels: settings.diagnostics.checkUndefinedLabels ?? true,
+        checkUnusedThreads: settings.diagnostics.checkUnusedThreads ?? true,
+        checkUnusedLabels: settings.diagnostics.checkUnusedLabels ?? true,
+        checkUnusedVariables: settings.diagnostics.checkUnusedVariables ?? true,
+        checkDuplicateThreads: settings.diagnostics.checkDuplicateThreads ?? true,
+        checkShadowedVariables: settings.diagnostics.checkShadowedVariables ?? false,
+        checkUnknownFunctions: settings.diagnostics.checkUnknownFunctions ?? true,
+        checkUnreachableCode: settings.diagnostics.checkUnreachableCode ?? true,
+      });
+    }
+
+    // Update data flow analyzer config
+    if (dataFlowAnalyzer && settings.dataFlow) {
+      const dataFlowEnabled = settings.dataFlow.enable !== false;
+      dataFlowAnalyzer.updateConfig({
+        detectUnusedVariables: dataFlowEnabled && (settings.dataFlow.detectUnusedVariables ?? true),
+        detectUninitializedAccess: dataFlowEnabled && (settings.dataFlow.detectUninitializedAccess ?? true),
+        detectNullChecks: dataFlowEnabled && (settings.dataFlow.detectNullChecks ?? true),
+        detectConstantPropagation: dataFlowEnabled && (settings.dataFlow.detectConstantPropagation ?? true),
+        detectDeadStores: dataFlowEnabled && (settings.dataFlow.detectDeadStores ?? true),
+        detectPotentialNullDeref: dataFlowEnabled && (settings.dataFlow.detectPotentialNullDeref ?? true),
+        crossFileAnalysis: dataFlowEnabled && (settings.dataFlow.crossFileAnalysis ?? true),
+      });
+    }
+
+    // Update code lens config
+    if (codeLensProvider && settings.codeLens) {
+      codeLensProvider.setConfig({
+        showReferenceCounts: settings.codeLens.showReferenceCounts ?? true,
+        showLabelReferences: settings.codeLens.showLabelReferences ?? false,
+        showVariableReferences: settings.codeLens.showVariableReferences ?? false,
+        minReferenceCount: settings.codeLens.minReferenceCount ?? 0,
+      });
+    }
+
+    // Update enhanced code lens config
+    if (enhancedCodeLensProvider && settings.codeLens) {
+      enhancedCodeLensProvider.updateConfig({
+        showReferences: settings.codeLens.showReferenceCounts ?? true,
+        showImplementations: settings.codeLens.showImplementations ?? true,
+        showEntryPoints: settings.codeLens.showEntryPoints ?? true,
+        showEventHandlers: settings.codeLens.showEventHandlers ?? true,
+        showPerformanceHints: settings.codeLens.showPerformanceHints ?? true,
+        showDebugInfo: settings.codeLens.showDebugInfo ?? true,
+        showCallers: settings.codeLens.showCallers ?? true,
+        showCallees: settings.codeLens.showCallees ?? true,
+        showUnusedWarnings: settings.codeLens.showUnusedWarnings ?? true,
+        minReferencesToShow: settings.codeLens.minReferenceCount ?? 0,
+      });
+    }
+
+    // Update inlay hints config
+    if (inlayHintsProvider && settings.inlayHints) {
+      inlayHintsProvider.updateConfig({
+        showParameterNames: settings.inlayHints.showParameterNames ?? true,
+        showParameterTypes: settings.inlayHints.showParameterTypes ?? true,
+        showVariableTypes: settings.inlayHints.showVariableTypes ?? true,
+        showThreadReturnTypes: settings.inlayHints.showThreadReturnTypes ?? true,
+        showEventInfo: settings.inlayHints.showEventInfo ?? true,
+        showReferenceCount: settings.inlayHints.showReferenceCount ?? false,
+        maxHintsPerLine: settings.inlayHints.maxHintsPerLine ?? 5,
+      });
+    }
+
+    // Update code actions config
+    if (advancedCodeActionsProvider && settings.codeActions) {
+      advancedCodeActionsProvider.updateConfig({
+        enableExtractThread: settings.codeActions.enableExtractThread ?? true,
+        enableExtractVariable: settings.codeActions.enableExtractVariable ?? true,
+        enableInlineVariable: settings.codeActions.enableInlineVariable ?? true,
+        enableOrganizeIncludes: settings.codeActions.enableOrganizeIncludes ?? true,
+        enableConversions: settings.codeActions.enableConversions ?? true,
+        enableQuickFixes: settings.codeActions.enableQuickFixes ?? true,
+        enableExplanations: settings.codeActions.enableExplanations ?? true,
+      });
+    }
+
+    // Update folding config
+    if (foldingRangesProvider && settings.folding) {
+      foldingRangesProvider.updateConfig({
+        foldComments: settings.folding.foldComments ?? true,
+        foldImports: settings.folding.foldImports ?? true,
+        foldRegions: settings.folding.foldRegions ?? true,
+        foldThreads: settings.folding.foldThreads ?? true,
+        foldControlFlow: settings.folding.foldControlFlow ?? true,
+        foldArrays: settings.folding.foldArrays ?? true,
+        minFoldLines: settings.folding.minFoldLines ?? 2,
+      });
+    }
+
+    // Update document links config
+    if (documentLinksProvider && settings.documentLinks) {
+      documentLinksProvider.updateConfig({
+        resolveScriptPaths: settings.documentLinks.resolveScriptPaths ?? true,
+        resolveAssetPaths: settings.documentLinks.resolveAssetPaths ?? true,
+        resolveUrls: settings.documentLinks.resolveUrls ?? true,
+        gamePaths: settings.paths?.gamePaths ?? [],
+      });
+    }
+
+    // Update dependency graph config
+    if (dependencyGraphProvider && settings.dependencyGraph) {
+      dependencyGraphProvider.updateConfig({
+        detectCircular: settings.dependencyGraph.detectCircular ?? true,
+        detectUnused: settings.dependencyGraph.detectUnused ?? true,
+        detectMissing: settings.dependencyGraph.detectMissing ?? true,
+        maxDepth: settings.dependencyGraph.maxDepth ?? 50,
+      });
+    }
+
+    // Update project health config
+    if (projectHealthProvider && settings.projectHealth) {
+      projectHealthProvider.updateConfig({
+        complexityThreshold: settings.projectHealth.complexityThreshold ?? 10,
+        duplicateMinLines: settings.projectHealth.duplicateMinLines ?? 5,
+        maxThreadLines: settings.projectHealth.maxThreadLines ?? 200,
+        maxNestingDepth: settings.projectHealth.maxNestingDepth ?? 5,
+        checkNamingConventions: settings.projectHealth.checkNamingConventions ?? true,
+      });
+    }
+
+    // Re-validate all open documents with new settings
+    documents.all().forEach((doc) => validateDocument(doc, 'onChange'));
+  }
+});
+
 /**
  * Validate document and send diagnostics
  */
-async function validateDocument(document: TextDocument): Promise<void> {
+async function validateDocument(document: TextDocument, trigger: 'onSave' | 'onChange' = 'onChange'): Promise<void> {
   const diagnostics: Diagnostic[] = [];
   const text = document.getText();
   const lines = text.split('\n');
@@ -609,8 +784,9 @@ async function validateDocument(document: TextDocument): Promise<void> {
         const name = threadMatch[1];
         const hasColon = codeOnly.includes(':');
 
-        // Skip reserved keywords - they are not thread definitions
-        if (!reservedKeywords.has(name)) {
+        // Skip reserved keywords and known built-in functions - they are not thread definitions
+        const isBuiltinFunction = functionDb.getFunction(name) !== undefined;
+        if (!reservedKeywords.has(name) && !isBuiltinFunction) {
           if (!hasColon && !inThread) {
             const errorIndex = rawLine.length;
             diagnostics.push({
@@ -738,9 +914,21 @@ async function validateDocument(document: TextDocument): Promise<void> {
   }
 
   // Run data flow analysis
-  if (dataFlowAnalyzer) {
+  if (dataFlowAnalyzer && dataFlowEnabled) {
     const dataFlowDiagnostics = dataFlowAnalyzer.analyze(document);
     diagnostics.push(...dataFlowDiagnostics);
+  }
+
+  // Run mfuse external validation if configured and trigger matches
+  if (mfuseConfig.enabled && mfuseConfig.execPath && mfuseConfig.trigger !== 'disabled') {
+    if (mfuseConfig.trigger === trigger || trigger === 'onSave') {
+      try {
+        const mfuseDiagnostics = await validateWithMfuse(document, mfuseConfig);
+        diagnostics.push(...mfuseDiagnostics);
+      } catch (err) {
+        connection.console.error(`Mfuse validation error: ${err}`);
+      }
+    }
   }
 
   // Record parse metrics

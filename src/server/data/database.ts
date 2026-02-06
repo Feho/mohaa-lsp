@@ -5,8 +5,11 @@
  */
 
 import { FunctionDatabase, FunctionDoc, GameVersion } from './types';
-import * as fs from 'fs';
-import * as path from 'path';
+
+// Static imports so esbuild bundles the JSON data directly into the output.
+// No runtime fs.readFileSync or copy-assets step needed.
+import MorpheusData from './Morpheus.json';
+import RebornData from './Reborn.json';
 
 // Built-in properties organized by scope
 export const LEVEL_PROPERTIES = [
@@ -86,28 +89,13 @@ export class FunctionDatabaseLoader {
   private loaded = false;
 
   /**
-   * Load function databases from JSON files
+   * Load function databases (bundled inline by esbuild)
    */
   async load(): Promise<void> {
     if (this.loaded) return;
 
-    const dataDir = path.join(__dirname);
-
-    try {
-      const morpheusPath = path.join(dataDir, 'Morpheus.json');
-      const morpheusContent = fs.readFileSync(morpheusPath, 'utf-8');
-      this.morpheusDb = JSON.parse(morpheusContent);
-    } catch (e) {
-      console.error('Failed to load Morpheus.json:', e);
-    }
-
-    try {
-      const rebornPath = path.join(dataDir, 'Reborn.json');
-      const rebornContent = fs.readFileSync(rebornPath, 'utf-8');
-      this.rebornDb = JSON.parse(rebornContent);
-    } catch (e) {
-      console.error('Failed to load Reborn.json:', e);
-    }
+    this.morpheusDb = MorpheusData as unknown as FunctionDatabase;
+    this.rebornDb = RebornData as unknown as FunctionDatabase;
 
     // Merge databases (Reborn entries override Morpheus for same name)
     this.merged = { ...this.morpheusDb, ...this.rebornDb };

@@ -130,6 +130,7 @@
       "title": "Morpheus Script",
       "properties": {
         "morpheus.gameVersion": {
+          "scope": "resource",
           "type": "array",
           "items": {
             "type": "string",
@@ -150,9 +151,468 @@
             "BT",
             "OPM"
           ],
-          "description": "Game versions to enable completions for"
+          "description": "Game versions to enable completions for (affects available commands)"
         },
+
+        "morpheus.validation.enable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable Morpheus script validation"
+        },
+        "morpheus.validation.mfusePath": {
+          "scope": "resource",
+          "type": "string",
+          "default": "",
+          "description": "Path to mfuse_exec executable for advanced script validation"
+        },
+        "morpheus.validation.trigger": {
+          "scope": "resource",
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onChange",
+            "disabled"
+          ],
+          "default": "onSave",
+          "description": "When to run external validation: onSave, onChange, or disabled"
+        },
+
+        "morpheus.diagnostics.checkUndefinedThreads": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Check for references to undefined threads"
+        },
+        "morpheus.diagnostics.checkUndefinedLabels": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Check for references to undefined labels"
+        },
+        "morpheus.diagnostics.checkUnusedThreads": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Report threads that are defined but never referenced"
+        },
+        "morpheus.diagnostics.checkUnusedLabels": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Report labels that are defined but never referenced"
+        },
+        "morpheus.diagnostics.checkUnusedVariables": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Report variables that are assigned but never read"
+        },
+        "morpheus.diagnostics.checkDuplicateThreads": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Check for multiple thread definitions with the same name"
+        },
+        "morpheus.diagnostics.checkShadowedVariables": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": false,
+          "description": "Check for variables that shadow outer-scope definitions"
+        },
+        "morpheus.diagnostics.checkUnknownFunctions": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Warn when calling functions not found in the command database"
+        },
+        "morpheus.diagnostics.checkUnreachableCode": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect unreachable code after return or end statements"
+        },
+
+        "morpheus.dataFlow.enable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable data flow analysis for advanced diagnostics"
+        },
+        "morpheus.dataFlow.detectUnusedVariables": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect variables that are assigned but never read (data flow)"
+        },
+        "morpheus.dataFlow.detectUninitializedAccess": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect reads of variables that may not be initialized"
+        },
+        "morpheus.dataFlow.detectNullChecks": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect missing null/NIL checks on potentially null values"
+        },
+        "morpheus.dataFlow.detectConstantPropagation": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect variables that always hold the same constant value"
+        },
+        "morpheus.dataFlow.detectDeadStores": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect assignments whose values are never read before being overwritten"
+        },
+        "morpheus.dataFlow.detectPotentialNullDeref": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect potential null/NIL dereferences"
+        },
+        "morpheus.dataFlow.crossFileAnalysis": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable cross-file data flow analysis (may affect performance)"
+        },
+
+        "morpheus.codeLens.enable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable CodeLens annotations above threads and labels"
+        },
+        "morpheus.codeLens.showReferenceCounts": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show reference count lenses for threads/functions"
+        },
+        "morpheus.codeLens.showLabelReferences": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": false,
+          "description": "Show reference count lenses for labels"
+        },
+        "morpheus.codeLens.showVariableReferences": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": false,
+          "description": "Show reference count lenses for variables (can be noisy)"
+        },
+        "morpheus.codeLens.minReferenceCount": {
+          "scope": "resource",
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Minimum reference count to display a code lens (0 = always show)"
+        },
+        "morpheus.codeLens.showImplementations": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show implementation lenses"
+        },
+        "morpheus.codeLens.showEntryPoints": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show entry point lenses for main/init threads"
+        },
+        "morpheus.codeLens.showEventHandlers": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show event handler lenses"
+        },
+        "morpheus.codeLens.showPerformanceHints": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show performance hint lenses for costly operations"
+        },
+        "morpheus.codeLens.showDebugInfo": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show debug info lenses"
+        },
+        "morpheus.codeLens.showCallers": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show caller count lenses"
+        },
+        "morpheus.codeLens.showCallees": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show callee count lenses"
+        },
+        "morpheus.codeLens.showUnusedWarnings": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show unused thread/function warnings via code lens"
+        },
+
+        "morpheus.inlayHints.enable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable inlay hints"
+        },
+        "morpheus.inlayHints.showParameterNames": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show parameter name hints at call sites"
+        },
+        "morpheus.inlayHints.showParameterTypes": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show inferred parameter type hints"
+        },
+        "morpheus.inlayHints.showVariableTypes": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show inferred variable type hints"
+        },
+        "morpheus.inlayHints.showThreadReturnTypes": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show return type hints for threads"
+        },
+        "morpheus.inlayHints.showEventInfo": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Show event information hints (e.g. waittill parameters)"
+        },
+        "morpheus.inlayHints.showReferenceCount": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": false,
+          "description": "Show inline reference count hints"
+        },
+        "morpheus.inlayHints.maxHintsPerLine": {
+          "scope": "resource",
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum number of inlay hints to show per line"
+        },
+
+        "morpheus.codeActions.enableExtractThread": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable 'Extract to Thread' refactoring"
+        },
+        "morpheus.codeActions.enableExtractVariable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable 'Extract to Variable' refactoring"
+        },
+        "morpheus.codeActions.enableInlineVariable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable 'Inline Variable' refactoring"
+        },
+        "morpheus.codeActions.enableOrganizeIncludes": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable 'Organize Includes' code action"
+        },
+        "morpheus.codeActions.enableConversions": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable code conversion actions (e.g. if/switch)"
+        },
+        "morpheus.codeActions.enableQuickFixes": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable quick fix suggestions for diagnostics"
+        },
+
+        "morpheus.folding.foldComments": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable folding of comment blocks"
+        },
+        "morpheus.folding.foldImports": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable folding of import/exec sections"
+        },
+        "morpheus.folding.foldRegions": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable folding of #region blocks"
+        },
+        "morpheus.folding.foldThreads": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable folding of thread definitions"
+        },
+        "morpheus.folding.foldControlFlow": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable folding of if/while/for/switch blocks"
+        },
+        "morpheus.folding.foldArrays": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable folding of multi-line const arrays"
+        },
+        "morpheus.folding.minFoldLines": {
+          "scope": "resource",
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 10,
+          "description": "Minimum number of lines required to create a fold"
+        },
+
+        "morpheus.documentLinks.resolveScriptPaths": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Make exec/script paths clickable links"
+        },
+        "morpheus.documentLinks.resolveAssetPaths": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Make asset paths (models, sounds, animations) clickable links"
+        },
+        "morpheus.documentLinks.resolveUrls": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Make URLs in comments clickable links"
+        },
+
+        "morpheus.callHierarchy.maxDepth": {
+          "scope": "resource",
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Maximum depth for call hierarchy traversal"
+        },
+        "morpheus.callHierarchy.includeBuiltIns": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Include built-in engine functions in call hierarchy"
+        },
+
+        "morpheus.dependencyGraph.detectCircular": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect circular dependencies between scripts"
+        },
+        "morpheus.dependencyGraph.detectUnused": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect scripts that are imported but never used"
+        },
+        "morpheus.dependencyGraph.detectMissing": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Detect missing script dependencies (exec'd files not found)"
+        },
+        "morpheus.dependencyGraph.maxDepth": {
+          "scope": "resource",
+          "type": "number",
+          "default": 50,
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Maximum depth for dependency graph traversal"
+        },
+
+        "morpheus.projectHealth.complexityThreshold": {
+          "scope": "resource",
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Cyclomatic complexity threshold above which threads are flagged"
+        },
+        "morpheus.projectHealth.duplicateMinLines": {
+          "scope": "resource",
+          "type": "number",
+          "default": 5,
+          "minimum": 2,
+          "maximum": 50,
+          "description": "Minimum number of duplicate lines to flag as code duplication"
+        },
+        "morpheus.projectHealth.maxThreadLines": {
+          "scope": "resource",
+          "type": "number",
+          "default": 200,
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "Maximum lines per thread before a 'too long' warning"
+        },
+        "morpheus.projectHealth.maxNestingDepth": {
+          "scope": "resource",
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum nesting depth before a complexity warning"
+        },
+        "morpheus.projectHealth.checkNamingConventions": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Check thread and variable naming conventions"
+        },
+
+        "morpheus.paths.commandsJson": {
+          "scope": "resource",
+          "type": "string",
+          "default": "",
+          "description": "Custom path to commands.json file. If empty, uses the bundled file."
+        },
+        "morpheus.paths.gamePaths": {
+          "scope": "resource",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional game directories to search for scripts and assets (e.g. MOHAA main folder)"
+        },
+
         "morpheus.trace.server": {
+          "scope": "window",
           "type": "string",
           "enum": [
             "off",
@@ -163,15 +623,61 @@
           "description": "Traces the communication between VS Code and the language server"
         }
       }
-    }
+    },
+    "taskDefinitions": [
+      {
+        "type": "morfuse",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "validate"
+            ],
+            "description": "The morfuse action to run"
+          },
+          "path": {
+            "type": "string",
+            "description": "Path to validate (defaults to workspace)"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "morfuse",
+        "owner": "morfuse",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^([EW]): \\((.+), (\\d+)\\):$",
+            "severity": 1,
+            "file": 2,
+            "location": 3
+          },
+          {
+            "regexp": "^[EW]: .+$"
+          },
+          {
+            "regexp": "^[EW]: \\^$"
+          },
+          {
+            "regexp": "^[EW]: \\^~\\^~\\^ .+: (.+)$",
+            "message": 1,
+            "loop": true
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "build": "npm run build:server && npm run build:extension",
     "build:server": "esbuild src/server/server.ts --bundle --outfile=dist/server/server.js --platform=node --format=cjs --external:web-tree-sitter",
     "build:extension": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "copy-assets": "mkdir -p dist/server/data && cp src/server/data/*.json dist/server/data/ && cp grammar/*.wasm dist/server/ && cp node_modules/web-tree-sitter/tree-sitter.wasm dist/server/",
     "watch": "npm run build -- --watch",
-    "package": "npm run build && npm run copy-assets && vsce package --no-dependencies --allow-missing-repository",
+    "package": "npm run build && vsce package --no-dependencies --allow-missing-repository",
     "publish": "vsce publish --no-dependencies",
     "clean": "rm -rf dist"
   },
