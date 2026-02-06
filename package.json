@@ -20,7 +20,8 @@
   "categories": [
     "Programming Languages",
     "Formatters",
-    "Linters"
+    "Linters",
+    "Debuggers"
   ],
   "keywords": [
     "mohaa",
@@ -37,7 +38,9 @@
     "openmohaa"
   ],
   "activationEvents": [
-    "onLanguage:morpheus"
+    "onLanguage:morpheus",
+    "onDebugResolve:openmohaa",
+    "onDebugInitialConfigurations"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -61,6 +64,66 @@
         "language": "morpheus",
         "scopeName": "source.morpheus",
         "path": "./syntaxes/morpheus.tmLanguage.json"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "openmohaa",
+        "label": "OpenMOHAA",
+        "languages": ["morpheus"],
+        "configurationAttributes": {
+          "launch": {
+            "required": [],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the OpenMOHAA executable",
+                "default": "openmohaa"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Arguments to pass to OpenMOHAA"
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the process"
+              },
+              "env": {
+                "type": "object",
+                "description": "Environment variables for the process",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "OpenMOHAA: Launch",
+            "description": "Launch OpenMOHAA for Morpheus script debugging",
+            "body": {
+              "type": "openmohaa",
+              "request": "launch",
+              "name": "Launch OpenMOHAA",
+              "program": "openmohaa",
+              "args": [],
+              "cwd": "${workspaceFolder}"
+            }
+          }
+        ],
+        "initialConfigurations": [
+          {
+            "type": "openmohaa",
+            "request": "launch",
+            "name": "Launch OpenMOHAA",
+            "program": "openmohaa",
+            "cwd": "${workspaceFolder}"
+          }
+        ]
       }
     ],
     "configuration": {
@@ -113,6 +176,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@vscode/debugadapter": "^1.68.0",
+    "@vscode/debugprotocol": "^1.68.0",
     "vscode-languageclient": "^9.0.1",
     "vscode-languageserver": "^9.0.1",
     "vscode-languageserver-textdocument": "^1.0.11",

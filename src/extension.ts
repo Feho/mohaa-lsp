@@ -10,10 +10,13 @@ import {
   ServerOptions,
   TransportKind,
 } from 'vscode-languageclient/node';
+import { registerOpenMohaaDebug } from './debug/openMohaaDebug';
 
 let client: LanguageClient | undefined;
 
 export async function activate(context: ExtensionContext): Promise<void> {
+  registerOpenMohaaDebug(context);
+
   // Path to the language server (bundled in dist/server/)
   const serverModule = context.asAbsolutePath(
     path.join('dist', 'server', 'server.js')
