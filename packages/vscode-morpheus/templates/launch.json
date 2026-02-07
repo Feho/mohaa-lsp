@@ -1,0 +1,34 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "openmohaa",
+            "request": "attach",
+            "name": "Attach to OpenMOHAA",
+            "port": 4711,
+            "host": "localhost"
+        },
+        {
+            "type": "openmohaa",
+            "request": "attach",
+            "name": "Attach to OpenMOHAA (Spearhead)",
+            "port": 4712,
+            "host": "localhost"
+        },
+        {
+            "type": "openmohaa",
+            "request": "attach",
+            "name": "Attach to Remote Server",
+            "port": 4711,
+            "host": "${input:serverHost}"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "serverHost",
+            "type": "promptString",
+            "description": "Enter the OpenMOHAA server hostname or IP",
+            "default": "localhost"
+        }
+    ]
+}

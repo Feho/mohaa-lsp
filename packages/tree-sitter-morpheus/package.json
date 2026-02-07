@@ -17,20 +17,25 @@
     "prebuilds/**",
     "bindings/node/*",
     "queries/*",
-    "src/**"
+    "src/**",
+    "tree-sitter-morpheus.wasm"
   ],
-  "scripts": {
-    "build": "tree-sitter generate && node-gyp build",
-    "generate": "tree-sitter generate",
-    "test": "tree-sitter test",
-    "parse": "tree-sitter parse"
-  },
+"scripts": {
+  "prepare": "pnpm exec tree-sitter generate",
+  "install": "node-gyp-build",
+  "build": "node-gyp build",
+  "build:wasm": "pnpm exec tree-sitter build --wasm -o tree-sitter-morpheus.wasm",
+  "test": "pnpm exec tree-sitter test",
+  "parse": "pnpm exec tree-sitter parse",
+  "prebuildify": "prebuildify --napi --strip"
+},
   "dependencies": {
     "node-addon-api": "^7.0.0",
     "node-gyp-build": "^4.6.1"
   },
   "devDependencies": {
-    "tree-sitter-cli": "^0.22.1"
+    "tree-sitter-cli": "^0.22.1",
+    "prebuildify": "^6.0.0"
   },
   "peerDependencies": {
     "tree-sitter": "^0.21.0"

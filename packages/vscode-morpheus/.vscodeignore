@@ -1,0 +1,48 @@
+# Development files
+.vscode/**
+.vscode-test/**
+.github/**
+.gitignore
+
+# Source files (bundled into dist/)
+src/**
+**/*.ts
+**/*.map
+!dist/**
+
+# Config files
+tsconfig.json
+.eslintrc*
+.prettierrc*
+*.config.js
+*.config.ts
+
+# Documentation (README is kept for marketplace)
+CONTRIBUTING.md
+vsc-extension-quickstart.md
+walkthrough.md
+
+# Template files (samples, not needed in extension)
+templates/**
+
+# Dev dependencies that aren't needed at runtime
+node_modules/**
+**/node_modules/typescript/**
+**/node_modules/@types/**
+**/node_modules/esbuild/**
+**/.bin/**
+
+# Package files
+*.vsix
+package-lock.json
+pnpm-lock.yaml
+
+# Build scripts
+scripts/**
+*.sh
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+__tests__/**
+test/**

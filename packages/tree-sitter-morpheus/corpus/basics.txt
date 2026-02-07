@@ -10,7 +10,7 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (end_statement))))
 
 ================================================================================
@@ -33,7 +33,7 @@ end
       (scoped_variable
         scope: (scope_keyword)
         name: (identifier)))
-    body: (block
+    body: (thread_body
       (expression_statement
         (call_expression
           function: (identifier)
@@ -58,13 +58,12 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (expression_statement
         (assignment_expression
           left: (scoped_variable
             scope: (scope_keyword)
             name: (identifier))
-          operator: (MISSING "=")
           right: (primary_expression
             (number))))
       (expression_statement
@@ -72,7 +71,6 @@ end
           left: (scoped_variable
             scope: (scope_keyword)
             name: (identifier))
-          operator: (MISSING "=")
           right: (primary_expression
             (string))))
       (expression_statement
@@ -80,7 +78,6 @@ end
           left: (scoped_variable
             scope: (scope_keyword)
             name: (identifier))
-          operator: (MISSING "=")
           right: (primary_expression
             (number))))
       (end_statement))))
@@ -105,7 +102,7 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (if_statement
         condition: (parenthesized_expression
           (binary_expression
@@ -145,7 +142,7 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (expression_statement
         (call_expression
           target: (entity_reference
@@ -172,13 +169,12 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (expression_statement
         (assignment_expression
           left: (scoped_variable
             scope: (scope_keyword)
             name: (identifier))
-          operator: (MISSING "=")
           right: (const_array
             (primary_expression
               (number))
@@ -206,7 +202,7 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (for_statement
         init: (assignment_expression
           left: (scoped_variable
@@ -265,7 +261,7 @@ end
 (source_file
   (thread_definition
     name: (identifier)
-    body: (block
+    body: (thread_body
       (switch_statement
         value: (parenthesized_expression
           (primary_expression
@@ -280,7 +276,8 @@ end
               function: (identifier)
               arguments: (argument_list
                 (primary_expression
-                  (string))))))
+                  (string)))))
+          (break_statement))
         (switch_case
           value: (primary_expression
             (number))
@@ -289,7 +286,8 @@ end
               function: (identifier)
               arguments: (argument_list
                 (primary_expression
-                  (string))))))
+                  (string)))))
+          (break_statement))
         (default_case
           (expression_statement
             (call_expression
@@ -297,4 +295,483 @@ end
               arguments: (argument_list
                 (primary_expression
                   (string)))))))
+      (end_statement))))
+
+================================================================================
+Thread with label inside
+================================================================================
+
+main:
+  goto loop
+loop:
+  println "loop"
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (goto_statement
+        label: (identifier))
+      (labeled_statement
+        label: (identifier)
+        (expression_statement
+          (call_expression
+            function: (identifier)
+            arguments: (argument_list
+              (primary_expression
+                (string))))))
+      (end_statement))))
+
+================================================================================
+Multiple threads
+================================================================================
+
+main:
+  thread helper 1 2
+end
+
+helper local.a local.b:
+  println local.a
+  println local.b
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (primary_expression
+                  (number))
+                (primary_expression
+                  (number)))))))
+      (end_statement)))
+  (thread_definition
+    name: (identifier)
+    parameters: (parameter_list
+      (scoped_variable
+        scope: (scope_keyword)
+        name: (identifier))
+      (scoped_variable
+        scope: (scope_keyword)
+        name: (identifier)))
+    body: (thread_body
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier)))))
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier)))))
+      (end_statement))))
+
+================================================================================
+End with return value
+================================================================================
+
+getvalue:
+end 42
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (end_statement
+        value: (primary_expression
+          (number))))))
+
+================================================================================
+Doc comment at file start
+================================================================================
+
+/**
+ * Doc comment
+ */
+main:
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (comment)
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (end_statement))))
+
+================================================================================
+Self reference standalone
+================================================================================
+
+main:
+  if (self)
+  {
+    self kill
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (if_statement
+        condition: (parenthesized_expression
+          (primary_expression
+            (self_reference)))
+        consequence: (block_or_statement
+          (expression_statement
+            (call_expression
+              target: (self_reference)
+              function: (identifier)))))
+      (end_statement))))
+
+================================================================================
+Increment operator
+================================================================================
+
+main:
+  for (local.i = 0; local.i < 10; local.i++)
+  {
+    println local.i
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (for_statement
+        init: (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (primary_expression
+            (number)))
+        condition: (binary_expression
+          (primary_expression
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier)))
+          (primary_expression
+            (number)))
+        update: (update_expression
+          (primary_expression
+            (scoped_variable
+              scope: (scope_keyword)
+              name: (identifier))))
+        body: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))))
+      (end_statement))))
+
+================================================================================
+Early return
+================================================================================
+
+main:
+  if (!self) end
+  println "alive"
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (if_statement
+        condition: (parenthesized_expression
+          (unary_expression
+            (primary_expression
+              (self_reference))))
+        consequence: (block_or_statement
+          (early_return)))
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (primary_expression
+              (string)))))
+      (end_statement))))
+
+================================================================================
+Vector with variable
+================================================================================
+
+main:
+  self.angles = (0 local.angle 0)
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (primary_expression
+            (vector
+              (number)
+              (scoped_variable
+                scope: (scope_keyword)
+                name: (identifier))
+              (number)))))
+      (end_statement))))
+
+================================================================================
+Make array
+================================================================================
+
+main:
+  local.arr = makeArray
+    "one"
+    "two"
+    "three"
+  endArray
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (make_array
+            (primary_expression
+              (string))
+            (primary_expression
+              (string))
+            (primary_expression
+              (string)))))
+      (end_statement))))
+
+================================================================================
+Top level statements
+================================================================================
+
+if(level.loaded != 1)
+{
+  exec global/utils.scr
+}
+
+main:
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (if_statement
+    condition: (parenthesized_expression
+      (binary_expression
+        (primary_expression
+          (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier)))
+        (primary_expression
+          (number))))
+    consequence: (block_or_statement
+      (expression_statement
+        (call_expression
+          function: (identifier)
+          arguments: (argument_list
+            (call_expression
+              function: (identifier)))))))
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (end_statement))))
+
+================================================================================
+Operator precedence: arithmetic before bitwise AND
+================================================================================
+
+main:
+    local.x = 1 + 2 & 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number)))
+            (primary_expression
+              (number)))))
+      (end_statement))))
+
+================================================================================
+Operator precedence: bitwise AND before bitwise OR
+================================================================================
+
+main:
+    local.x = 1 | 2 & 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (primary_expression
+              (number))
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number))))))
+      (end_statement))))
+
+================================================================================
+Operator precedence: comparison before bitwise
+================================================================================
+
+main:
+    local.x = 1 == 2 & 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number)))
+            (primary_expression
+              (number)))))
+      (end_statement))))
+
+================================================================================
+Operator precedence: bitwise before logical
+================================================================================
+
+main:
+    local.x = 1 & 2 && 3
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (expression_statement
+        (assignment_expression
+          left: (scoped_variable
+            scope: (scope_keyword)
+            name: (identifier))
+          right: (binary_expression
+            (binary_expression
+              (primary_expression
+                (number))
+              (primary_expression
+                (number)))
+            (primary_expression
+              (number)))))
+      (end_statement))))
+================================================================================
+While loop
+================================================================================
+
+main:
+  while (local.i < 10)
+  {
+    println local.i
+    local.i++
+  }
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (thread_definition
+    name: (identifier)
+    body: (thread_body
+      (while_statement
+        condition: (parenthesized_expression
+          (binary_expression
+            (primary_expression
+              (scoped_variable
+                scope: (scope_keyword)
+                name: (identifier)))
+            (primary_expression
+              (number))))
+        body: (block_or_statement
+          (expression_statement
+            (call_expression
+              function: (identifier)
+              arguments: (argument_list
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))
+          (expression_statement
+            (update_expression
+              (primary_expression
+                (scoped_variable
+                  scope: (scope_keyword)
+                  name: (identifier)))))))
       (end_statement))))

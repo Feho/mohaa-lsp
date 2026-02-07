@@ -1,23 +1,67 @@
 {
-  "name": "vscode-morpheus",
+  "name": "morpheus-vscode",
   "displayName": "Morpheus Script",
-  "description": "Language support for MOHAA Morpheus Script (.scr)",
-  "version": "0.1.0",
+  "description": "Full language support for MOHAA Morpheus Script (.scr) - syntax highlighting, completions, hover docs, go-to-definition, debugging, formatting, and validation.",
+  "version": "0.2.0",
   "publisher": "mohaa-community",
+  "author": {
+    "name": "Mohaa Community",
+    "url": "https://github.com/elgansayer"
+  },
+  "contributors": [
+    {
+      "name": "Feho",
+      "url": "https://github.com/Feho"
+    },
+    {
+      "name": "Elgan",
+      "url": "https://github.com/elgansayer"
+    }
+  ],
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elgansayer/mohaa-lsp"
+  },
+  "bugs": {
+    "url": "https://github.com/elgansayer/mohaa-lsp/issues"
+  },
+  "homepage": "https://github.com/elgansayer/mohaa-lsp#readme",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Debuggers",
+    "Formatters",
+    "Linters"
   ],
   "keywords": [
-    "mohaa",
     "morpheus",
+    "mohaa",
+    "MOHAA",
+    "medal of honor",
+    "Medal of Honor Allied Assault",
+    "Allied Assault",
+    "openmohaa",
+    "OpenMOHAA",
+    "script",
+    "scripting",
+    ".scr",
     "scr",
-    "medal of honor"
+    "language server",
+    "game modding",
+    "tree-sitter"
   ],
   "activationEvents": [
-    "onLanguage:morpheus"
+    "onLanguage:morpheus",
+    "onDebug",
+    "onDebugResolve:openmohaa"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -46,6 +90,7 @@
       "title": "Morpheus Script",
       "properties": {
         "morpheus.gameVersion": {
+          "scope": "resource",
           "type": "array",
           "items": {
             "type": "string",
@@ -62,9 +107,45 @@
             "SH",
             "BT"
           ],
-          "description": "Game versions to enable completions for"
+          "description": "Game versions to enable completions for (affects available commands)"
+        },
+        "morpheus.validation.enable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable Morpheus script validation"
+        },
+        "morpheus.validation.mfusePath": {
+          "scope": "resource",
+          "type": "string",
+          "default": "",
+          "description": "Path to mfuse_exec executable for advanced script validation"
+        },
+        "morpheus.validation.trigger": {
+          "scope": "resource",
+          "type": "string",
+          "enum": [
+            "onSave",
+            "onChange",
+            "disabled"
+          ],
+          "default": "onSave",
+          "description": "When to run external validation: onSave, onChange, or disabled"
+        },
+        "morpheus.formatting.enable": {
+          "scope": "resource",
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable Morpheus script formatting"
+        },
+        "morpheus.paths.commandsJson": {
+          "scope": "resource",
+          "type": "string",
+          "default": "",
+          "description": "Custom path to commands.json file. If empty, uses the bundled file."
         },
         "morpheus.trace.server": {
+          "scope": "window",
           "type": "string",
           "enum": [
             "off",
@@ -75,19 +156,116 @@
           "description": "Traces the communication between VS Code and the language server"
         }
       }
-    }
+    },
+    "debuggers": [
+      {
+        "type": "openmohaa",
+        "label": "OpenMOHAA Debugger",
+        "languages": [
+          "morpheus"
+        ],
+        "configurationAttributes": {
+          "attach": {
+            "properties": {
+              "port": {
+                "type": "number",
+                "description": "Port number to connect to (default: 4711)",
+                "default": 4711
+              },
+              "host": {
+                "type": "string",
+                "description": "Host address to connect to (default: localhost)",
+                "default": "localhost"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "openmohaa",
+            "request": "attach",
+            "name": "Attach to OpenMOHAA",
+            "port": 4711,
+            "host": "localhost"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "OpenMOHAA: Attach",
+            "description": "Attach to running OpenMOHAA game for script debugging",
+            "body": {
+              "type": "openmohaa",
+              "request": "attach",
+              "name": "Attach to OpenMOHAA",
+              "port": 4711,
+              "host": "localhost"
+            }
+          }
+        ]
+      }
+    ],
+    "taskDefinitions": [
+      {
+        "type": "morfuse",
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "validate"
+            ],
+            "description": "The morfuse action to run"
+          },
+          "path": {
+            "type": "string",
+            "description": "Path to validate (defaults to workspace)"
+          }
+        }
+      }
+    ],
+    "problemMatchers": [
+      {
+        "name": "morfuse",
+        "owner": "morfuse",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^([EW]): \\((.+), (\\d+)\\):$",
+            "severity": 1,
+            "file": 2,
+            "location": 3
+          },
+          {
+            "regexp": "^[EW]: .+$"
+          },
+          {
+            "regexp": "^[EW]: \\^$"
+          },
+          {
+            "regexp": "^[EW]: \\^~\\^~\\^ .+: (.+)$",
+            "message": 1,
+            "loop": true
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "watch": "npm run build -- --watch",
-    "package": "vsce package",
+    "vscode:prepublish": "pnpm run build",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node && pnpm run copy-server",
+    "copy-server": "pnpm --filter morpheus-lsp build && mkdir -p dist/server && cp -r ../morpheus-lsp/dist/* dist/server/",
+    "watch": "pnpm run build -- --watch",
+    "package": "vsce package --no-dependencies",
     "publish": "vsce publish"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^2.22.0",
     "esbuild": "^0.19.10",
     "typescript": "^5.3.3"

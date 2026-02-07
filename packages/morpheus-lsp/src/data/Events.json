@@ -1,0 +1,1008 @@
+{
+  "player_connected": {
+    "name": "player_connected",
+    "description": "The player just connected to the server. Called once per connection when the player entity has been created.",
+    "category": "player",
+    "parameters": [],
+    "self": "The player object",
+    "example": "event_player_connected:\n    iprintlnbold(\"Player \" + self.entnum + \" connected!\")\nend"
+  },
+  "player_disconnecting": {
+    "name": "player_disconnecting",
+    "description": "The player is disconnecting from the server. Called before the player entity is removed.",
+    "category": "player",
+    "parameters": [],
+    "self": "The player object",
+    "example": "event_player_disconnecting:\n    iprintlnbold(\"Player \" + self.entnum + \" is disconnecting!\")\nend"
+  },
+  "player_spawned": {
+    "name": "player_spawned",
+    "description": "The player has spawned. Called when the player has entered the battle, respawned, or spawned with weapons. Can be called even for spectators.",
+    "category": "player",
+    "parameters": [],
+    "self": "The player object",
+    "example": "event_player_spawned:\n    iprintlnbold(\"Player \" + self.entnum + \" just spawned!\")\nend"
+  },
+  "player_damaged": {
+    "name": "player_damaged",
+    "description": "The player got hit and took damage.",
+    "category": "player",
+    "parameters": [
+      { "name": "local.attacker", "description": "The entity that caused the damage" },
+      { "name": "local.damage", "description": "Amount of damage taken" },
+      { "name": "local.inflictor", "description": "The entity that directly caused the damage (projectile, explosion, etc.)" },
+      { "name": "local.position", "description": "Vector position where damage was applied" },
+      { "name": "local.direction", "description": "Direction vector of the damage" },
+      { "name": "local.normal", "description": "Surface normal at impact point" },
+      { "name": "local.knockback", "description": "Knockback force applied" },
+      { "name": "local.damageflags", "description": "Damage type flags" },
+      { "name": "local.meansofdeath", "description": "Means of death identifier" },
+      { "name": "local.location", "description": "Hit location on body" }
+    ],
+    "self": "The player object (victim)",
+    "example": "event_player_damaged local.attacker local.damage local.inflictor local.position local.direction local.normal local.knockback local.damageflags local.meansofdeath local.location:\n    iprintlnbold(\"Player \" + self.entnum + \" took \" + local.damage + \" damage!\")\nend"
+  },
+  "player_killed": {
+    "name": "player_killed",
+    "description": "The player got killed. Called when the player's health reaches zero or below.",
+    "category": "player",
+    "parameters": [
+      { "name": "local.attacker", "description": "The entity that caused the killing blow" },
+      { "name": "local.damage", "description": "Amount of damage that killed the player" },
+      { "name": "local.inflictor", "description": "The entity that directly caused the death" },
+      { "name": "local.position", "description": "Vector position where fatal damage was applied" },
+      { "name": "local.direction", "description": "Direction vector of the fatal damage" },
+      { "name": "local.normal", "description": "Surface normal at impact point" },
+      { "name": "local.knockback", "description": "Knockback force applied" },
+      { "name": "local.damageflags", "description": "Damage type flags" },
+      { "name": "local.meansofdeath", "description": "Means of death identifier" },
+      { "name": "local.location", "description": "Hit location on body" }
+    ],
+    "self": "The player object (victim)",
+    "example": "event_player_killed local.attacker local.damage local.inflictor local.position local.direction local.normal local.knockback local.damageflags local.meansofdeath local.location:\n    iprintlnbold(\"Player \" + self.entnum + \" was killed by \" + local.attacker.entnum)\nend"
+  },
+  "player_textMessage": {
+    "name": "player_textMessage",
+    "description": "The player sent a text message. Return 0 to block the message, or a string to block and reply to the player.",
+    "category": "player",
+    "parameters": [
+      { "name": "local.text", "description": "The raw text message the client sent" },
+      { "name": "local.is_team", "description": "1 if team message, 0 if global" }
+    ],
+    "self": "The player object",
+    "example": "event_player_textMessage local.text local.is_team:\n    iprintlnbold(\"Player \" + self.entnum + \" said: \" + local.text)\n    // Return 0 to block the message\n    // Return a string to block and reply to player\nend"
+  },
+  "player_kill": {
+    "name": "player_kill",
+    "description": "A player killed another player.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.attacker", "description": "The killer (duplicate of self)" },
+      { "name": "local.victim", "description": "The player who died" },
+      { "name": "local.inflictor", "description": "Entity that directly caused death" },
+      { "name": "local.location", "description": "Hit location" },
+      { "name": "local.meansofdeath", "description": "Means of death identifier" }
+    ],
+    "self": "The attacker",
+    "example": "event_player_kill local.attacker local.victim local.inflictor local.location local.meansofdeath:\n    iprintlnbold(self.netname + \" killed \" + local.victim.netname)\nend"
+  },
+  "player_death": {
+    "name": "player_death",
+    "description": "A player died.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.inflictor", "description": "Entity that caused death" }
+    ],
+    "self": "The victim",
+    "example": "event_player_death local.inflictor:\n    iprintlnbold(\"Player \" + self.netname + \" died\")\nend"
+  },
+  "player_damage": {
+    "name": "player_damage",
+    "description": "A player took damage.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.attacker", "description": "The attacker entity" },
+      { "name": "local.damage", "description": "Amount of damage" },
+      { "name": "local.meansofdeath", "description": "Means of death identifier" }
+    ],
+    "self": "The victim",
+    "example": "event_player_damage local.attacker local.damage local.meansofdeath:\n    iprintlnbold(self.netname + \" took \" + local.damage + \" damage\")\nend"
+  },
+  "player_pain": {
+    "name": "player_pain",
+    "description": "A player experienced pain with hit location info.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.attacker", "description": "The attacker entity" },
+      { "name": "local.damage", "description": "Amount of damage" },
+      { "name": "local.meansofdeath", "description": "Means of death identifier" },
+      { "name": "local.hit_location", "description": "Body part hit (integer)" }
+    ],
+    "self": "The victim",
+    "example": "event_player_pain local.attacker local.damage local.meansofdeath local.hit_location:\n    iprintlnbold(self.netname + \" hit in \" + local.hit_location)\nend"
+  },
+  "player_headshot": {
+    "name": "player_headshot",
+    "description": "A player got a headshot kill.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.victim", "description": "The player who was headshot" },
+      { "name": "local.weapon_name", "description": "Name of the weapon used" }
+    ],
+    "self": "The attacker",
+    "example": "event_player_headshot local.victim local.weapon_name:\n    iprintlnbold(self.netname + \" headshot \" + local.victim.netname + \" with \" + local.weapon_name)\nend"
+  },
+  "player_suicide": {
+    "name": "player_suicide",
+    "description": "A player killed themselves.",
+    "category": "combat",
+    "parameters": [],
+    "self": "The player who suicided",
+    "example": "event_player_suicide:\n    iprintlnbold(self.netname + \" committed suicide\")\nend"
+  },
+  "player_crushed": {
+    "name": "player_crushed",
+    "description": "A player was crushed.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.attacker", "description": "Entity that crushed them" }
+    ],
+    "self": "The victim",
+    "example": "event_player_crushed local.attacker:\n    iprintlnbold(self.netname + \" was crushed\")\nend"
+  },
+  "player_telefragged": {
+    "name": "player_telefragged",
+    "description": "A player was telefragged.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.attacker", "description": "Player who telefragged them" }
+    ],
+    "self": "The victim",
+    "example": "event_player_telefragged local.attacker:\n    iprintlnbold(self.netname + \" was telefragged by \" + local.attacker.netname)\nend"
+  },
+  "player_roadkill": {
+    "name": "player_roadkill",
+    "description": "A player was killed by a vehicle.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.victim", "description": "The player who was run over" }
+    ],
+    "self": "The attacker",
+    "example": "event_player_roadkill local.victim:\n    iprintlnbold(self.netname + \" ran over \" + local.victim.netname)\nend"
+  },
+  "player_bash": {
+    "name": "player_bash",
+    "description": "A player got a melee bash kill.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.victim", "description": "The player who was bashed" }
+    ],
+    "self": "The attacker",
+    "example": "event_player_bash local.victim:\n    iprintlnbold(self.netname + \" bashed \" + local.victim.netname)\nend"
+  },
+  "player_teamkill": {
+    "name": "player_teamkill",
+    "description": "A player killed a teammate.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.victim", "description": "The teammate who was killed" }
+    ],
+    "self": "The killer",
+    "example": "event_player_teamkill local.victim:\n    iprintlnbold(self.netname + \" team killed \" + local.victim.netname)\nend"
+  },
+  "weapon_fire": {
+    "name": "weapon_fire",
+    "description": "A weapon was fired.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" },
+      { "name": "local.ammo_remaining", "description": "Ammo left after firing" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_fire local.weapon_name local.ammo_remaining:\n    // self is the weapon owner\nend"
+  },
+  "weapon_hit": {
+    "name": "weapon_hit",
+    "description": "A weapon hit a target.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.target", "description": "The entity that was hit" },
+      { "name": "local.hit_location_or_type", "description": "Hit location or 'projectile' for projectile hits" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_hit local.target local.hit_location_or_type:\n    iprintlnbold(self.netname + \" hit \" + local.target.netname)\nend"
+  },
+  "weapon_reload": {
+    "name": "weapon_reload",
+    "description": "A weapon started reloading.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_reload local.weapon_name:\n    // Player started reloading\nend"
+  },
+  "weapon_reload_done": {
+    "name": "weapon_reload_done",
+    "description": "A weapon finished reloading.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_reload_done local.weapon_name:\n    // Reload complete\nend"
+  },
+  "weapon_change": {
+    "name": "weapon_change",
+    "description": "A player switched weapons.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.old_weapon", "description": "Previous weapon name (or 'none')" },
+      { "name": "local.new_weapon", "description": "New weapon name" },
+      { "name": "local.client_num", "description": "Client number" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_change local.old_weapon local.new_weapon local.client_num:\n    iprintlnbold(self.netname + \" switched from \" + local.old_weapon + \" to \" + local.new_weapon)\nend"
+  },
+  "weapon_ready": {
+    "name": "weapon_ready",
+    "description": "A weapon became ready.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_ready local.weapon_name:\n    // Weapon is ready to fire\nend"
+  },
+  "weapon_no_ammo": {
+    "name": "weapon_no_ammo",
+    "description": "A weapon ran out of ammo.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_no_ammo local.weapon_name:\n    iprintlnbold(self.netname + \" is out of ammo for \" + local.weapon_name)\nend"
+  },
+  "weapon_holster": {
+    "name": "weapon_holster",
+    "description": "A weapon was holstered.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_holster local.weapon_name:\n    // Weapon holstered\nend"
+  },
+  "weapon_raise": {
+    "name": "weapon_raise",
+    "description": "A weapon was raised.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_name", "description": "Name of the weapon" }
+    ],
+    "self": "The weapon owner",
+    "example": "event_weapon_raise local.weapon_name:\n    // Weapon raised\nend"
+  },
+  "weapon_drop": {
+    "name": "weapon_drop",
+    "description": "A weapon was dropped.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.weapon_entity", "description": "The dropped weapon entity" }
+    ],
+    "self": "The previous owner",
+    "example": "event_weapon_drop local.weapon_entity:\n    iprintlnbold(self.netname + \" dropped a weapon\")\nend"
+  },
+  "grenade_throw": {
+    "name": "grenade_throw",
+    "description": "A grenade was thrown.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.projectile_entity", "description": "The grenade entity" }
+    ],
+    "self": "The thrower",
+    "example": "event_grenade_throw local.projectile_entity:\n    iprintlnbold(self.netname + \" threw a grenade\")\nend"
+  },
+  "grenade_explode": {
+    "name": "grenade_explode",
+    "description": "A grenade exploded.",
+    "category": "combat",
+    "parameters": [
+      { "name": "local.grenade_entity", "description": "The grenade entity" }
+    ],
+    "self": "The thrower",
+    "example": "event_grenade_explode local.grenade_entity:\n    // Grenade exploded\nend"
+  },
+  "player_spawn": {
+    "name": "player_spawn",
+    "description": "A player spawned.",
+    "category": "movement",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_spawn:\n    iprintlnbold(self.netname + \" spawned\")\nend"
+  },
+  "player_respawn": {
+    "name": "player_respawn",
+    "description": "A player respawned.",
+    "category": "movement",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_respawn:\n    iprintlnbold(self.netname + \" respawned\")\nend"
+  },
+  "player_jump": {
+    "name": "player_jump",
+    "description": "A player jumped.",
+    "category": "movement",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_jump:\n    // Player jumped\nend"
+  },
+  "player_land": {
+    "name": "player_land",
+    "description": "A player landed after falling/jumping.",
+    "category": "movement",
+    "parameters": [
+      { "name": "local.fall_velocity", "description": "Z velocity when landing" }
+    ],
+    "self": "The player",
+    "example": "event_player_land local.fall_velocity:\n    // Player landed with velocity local.fall_velocity\nend"
+  },
+  "player_crouch": {
+    "name": "player_crouch",
+    "description": "A player crouched.",
+    "category": "movement",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_crouch:\n    // Player crouched\nend"
+  },
+  "player_prone": {
+    "name": "player_prone",
+    "description": "A player went prone.",
+    "category": "movement",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_prone:\n    // Player went prone\nend"
+  },
+  "player_stand": {
+    "name": "player_stand",
+    "description": "A player stood up.",
+    "category": "movement",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_stand:\n    // Player stood up\nend"
+  },
+  "player_distance": {
+    "name": "player_distance",
+    "description": "Player distance traveled update.",
+    "category": "movement",
+    "parameters": [
+      { "name": "local.walked", "description": "Distance walked" },
+      { "name": "local.sprinted", "description": "Distance sprinted" },
+      { "name": "local.swam", "description": "Distance swam" },
+      { "name": "local.driven", "description": "Distance driven in vehicles" }
+    ],
+    "self": "The player",
+    "example": "event_player_distance local.walked local.sprinted local.swam local.driven:\n    iprintlnbold(self.netname + \" walked \" + local.walked + \" units\")\nend"
+  },
+  "ladder_mount": {
+    "name": "ladder_mount",
+    "description": "A player mounted a ladder.",
+    "category": "movement",
+    "parameters": [
+      { "name": "local.ladder_entity", "description": "The ladder entity" }
+    ],
+    "self": "The player",
+    "example": "event_ladder_mount local.ladder_entity:\n    // Player got on a ladder\nend"
+  },
+  "ladder_dismount": {
+    "name": "ladder_dismount",
+    "description": "A player dismounted a ladder.",
+    "category": "movement",
+    "parameters": [
+      { "name": "local.ladder_entity", "description": "The ladder entity" }
+    ],
+    "self": "The player",
+    "example": "event_ladder_dismount local.ladder_entity:\n    // Player got off a ladder\nend"
+  },
+  "player_use": {
+    "name": "player_use",
+    "description": "A player used something.",
+    "category": "interaction",
+    "parameters": [
+      { "name": "local.target_entity", "description": "The entity that was used" }
+    ],
+    "self": "The player",
+    "example": "event_player_use local.target_entity:\n    iprintlnbold(self.netname + \" used something\")\nend"
+  },
+  "player_use_object_start": {
+    "name": "player_use_object_start",
+    "description": "A player started using an object.",
+    "category": "interaction",
+    "parameters": [
+      { "name": "local.use_object", "description": "The use object entity" }
+    ],
+    "self": "The player",
+    "example": "event_player_use_object_start local.use_object:\n    // Player started using an object\nend"
+  },
+  "player_use_object_finish": {
+    "name": "player_use_object_finish",
+    "description": "A player finished using an object.",
+    "category": "interaction",
+    "parameters": [
+      { "name": "local.use_object", "description": "The use object entity" }
+    ],
+    "self": "The player",
+    "example": "event_player_use_object_finish local.use_object:\n    // Player finished using an object\nend"
+  },
+  "player_spectate": {
+    "name": "player_spectate",
+    "description": "A player became a spectator.",
+    "category": "interaction",
+    "parameters": [],
+    "self": "The player",
+    "example": "event_player_spectate:\n    iprintlnbold(self.netname + \" became a spectator\")\nend"
+  },
+  "player_freeze": {
+    "name": "player_freeze",
+    "description": "A player was frozen or unfrozen.",
+    "category": "interaction",
+    "parameters": [
+      { "name": "local.frozen_state", "description": "1 if frozen, 0 if unfrozen" }
+    ],
+    "self": "The player",
+    "example": "event_player_freeze local.frozen_state:\n    if (local.frozen_state == 1)\n        iprintlnbold(self.netname + \" is frozen\")\n    else\n        iprintlnbold(self.netname + \" is unfrozen\")\n    end\nend"
+  },
+  "player_say": {
+    "name": "player_say",
+    "description": "A player sent a chat message (extended event).",
+    "category": "interaction",
+    "parameters": [
+      { "name": "local.message_text", "description": "The chat message text" }
+    ],
+    "self": "The player",
+    "example": "event_player_say local.message_text:\n    iprintlnbold(self.netname + \" said: \" + local.message_text)\nend"
+  },
+  "item_pickup": {
+    "name": "item_pickup",
+    "description": "A player picked up an item.",
+    "category": "item",
+    "parameters": [
+      { "name": "local.item_name", "description": "Name of the item" },
+      { "name": "local.amount", "description": "Amount picked up" }
+    ],
+    "self": "The player",
+    "example": "event_item_pickup local.item_name local.amount:\n    iprintlnbold(self.netname + \" picked up \" + local.item_name)\nend"
+  },
+  "item_drop": {
+    "name": "item_drop",
+    "description": "A player dropped an item.",
+    "category": "item",
+    "parameters": [
+      { "name": "local.item_name", "description": "Name of the item" }
+    ],
+    "self": "The previous owner",
+    "example": "event_item_drop local.item_name:\n    iprintlnbold(self.netname + \" dropped \" + local.item_name)\nend"
+  },
+  "item_respawn": {
+    "name": "item_respawn",
+    "description": "An item respawned on the map.",
+    "category": "item",
+    "parameters": [
+      { "name": "local.item_name", "description": "Name of the item" }
+    ],
+    "self": "The item entity",
+    "example": "event_item_respawn local.item_name:\n    // Item respawned on map\nend"
+  },
+  "health_pickup": {
+    "name": "health_pickup",
+    "description": "A player picked up health.",
+    "category": "item",
+    "parameters": [
+      { "name": "local.heal_amount", "description": "Amount of health restored" }
+    ],
+    "self": "The player",
+    "example": "event_health_pickup local.heal_amount:\n    iprintlnbold(self.netname + \" picked up \" + local.heal_amount + \" health\")\nend"
+  },
+  "ammo_pickup": {
+    "name": "ammo_pickup",
+    "description": "A player picked up ammo.",
+    "category": "item",
+    "parameters": [
+      { "name": "local.ammo_name", "description": "Name of the ammo type" },
+      { "name": "local.amount", "description": "Amount picked up" }
+    ],
+    "self": "The player",
+    "example": "event_ammo_pickup local.ammo_name local.amount:\n    iprintlnbold(self.netname + \" picked up \" + local.amount + \" \" + local.ammo_name)\nend"
+  },
+  "armor_pickup": {
+    "name": "armor_pickup",
+    "description": "A player picked up armor.",
+    "category": "item",
+    "parameters": [
+      { "name": "local.armor_amount", "description": "Amount of armor" }
+    ],
+    "self": "The player",
+    "example": "event_armor_pickup local.armor_amount:\n    iprintlnbold(self.netname + \" picked up \" + local.armor_amount + \" armor\")\nend"
+  },
+  "vehicle_enter": {
+    "name": "vehicle_enter",
+    "description": "A player entered a vehicle.",
+    "category": "vehicle",
+    "parameters": [
+      { "name": "local.vehicle_entity", "description": "The vehicle entity" }
+    ],
+    "self": "The player",
+    "example": "event_vehicle_enter local.vehicle_entity:\n    iprintlnbold(self.netname + \" entered a vehicle\")\nend"
+  },
+  "vehicle_exit": {
+    "name": "vehicle_exit",
+    "description": "A player exited a vehicle.",
+    "category": "vehicle",
+    "parameters": [
+      { "name": "local.vehicle_entity", "description": "The vehicle entity" }
+    ],
+    "self": "The player",
+    "example": "event_vehicle_exit local.vehicle_entity:\n    iprintlnbold(self.netname + \" exited a vehicle\")\nend"
+  },
+  "vehicle_death": {
+    "name": "vehicle_death",
+    "description": "A vehicle was destroyed.",
+    "category": "vehicle",
+    "parameters": [
+      { "name": "local.attacker", "description": "Entity that destroyed the vehicle" }
+    ],
+    "self": "The vehicle entity",
+    "example": "event_vehicle_death local.attacker:\n    iprintlnbold(\"Vehicle destroyed\")\nend"
+  },
+  "vehicle_collision": {
+    "name": "vehicle_collision",
+    "description": "A vehicle collided with something.",
+    "category": "vehicle",
+    "parameters": [
+      { "name": "local.other_entity", "description": "Entity the vehicle collided with" }
+    ],
+    "self": "The vehicle entity",
+    "example": "event_vehicle_collision local.other_entity:\n    // Vehicle collided with something\nend"
+  },
+  "turret_enter": {
+    "name": "turret_enter",
+    "description": "A player entered a turret.",
+    "category": "vehicle",
+    "parameters": [
+      { "name": "local.turret_entity", "description": "The turret entity" }
+    ],
+    "self": "The player",
+    "example": "event_turret_enter local.turret_entity:\n    iprintlnbold(self.netname + \" entered a turret\")\nend"
+  },
+  "turret_exit": {
+    "name": "turret_exit",
+    "description": "A player exited a turret.",
+    "category": "vehicle",
+    "parameters": [
+      { "name": "local.turret_entity", "description": "The turret entity" }
+    ],
+    "self": "The player",
+    "example": "event_turret_exit local.turret_entity:\n    iprintlnbold(self.netname + \" exited a turret\")\nend"
+  },
+  "server_console_command": {
+    "name": "server_console_command",
+    "description": "A console command was executed.",
+    "category": "server",
+    "parameters": [
+      { "name": "local.command_string", "description": "The command that was executed" }
+    ],
+    "self": "None (use level or world)",
+    "example": "event_server_console_command local.command_string:\n    iprintlnbold(\"Server command: \" + local.command_string)\nend"
+  },
+  "server_process_start": {
+    "name": "server_process_start",
+    "description": "The server process just started. Called once per server executable start (not per map).",
+    "category": "server",
+    "parameters": [],
+    "self": "None",
+    "example": "event_server_process_start:\n    // Server executable just started (called once per process)\nend"
+  },
+  "server_process_quit": {
+    "name": "server_process_quit",
+    "description": "The server process is quitting. Called once when the server executable is shutting down.",
+    "category": "server",
+    "parameters": [],
+    "self": "None",
+    "example": "event_server_process_quit:\n    // Server executable is quitting (called once per process)\nend"
+  },
+  "map_init": {
+    "name": "map_init",
+    "description": "Map initialization has started.",
+    "category": "map",
+    "parameters": [],
+    "self": "None",
+    "example": "event_map_init:\n    // Map initialization started\nend"
+  },
+  "map_start": {
+    "name": "map_start",
+    "description": "Map initialization is complete.",
+    "category": "map",
+    "parameters": [],
+    "self": "None",
+    "example": "event_map_start:\n    // Map initialization complete\nend"
+  },
+  "map_shutdown": {
+    "name": "map_shutdown",
+    "description": "The map is shutting down.",
+    "category": "map",
+    "parameters": [],
+    "self": "None",
+    "example": "event_map_shutdown:\n    // Map is shutting down\nend"
+  },
+  "map_ready": {
+    "name": "map_ready",
+    "description": "The map is ready and all entities have spawned.",
+    "category": "map",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" },
+      { "name": "local.gametype", "description": "Game type integer" }
+    ],
+    "self": "None",
+    "example": "event_map_ready local.map_name local.gametype:\n    iprintlnbold(\"Map \" + local.map_name + \" is ready, gametype \" + local.gametype)\nend"
+  },
+  "map_load_start": {
+    "name": "map_load_start",
+    "description": "A map is starting to load.",
+    "category": "map",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" }
+    ],
+    "self": "None",
+    "example": "event_map_load_start local.map_name:\n    iprintlnbold(\"Loading map \" + local.map_name)\nend"
+  },
+  "map_load_end": {
+    "name": "map_load_end",
+    "description": "A map finished loading.",
+    "category": "map",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" },
+      { "name": "local.gametype", "description": "Game type integer" }
+    ],
+    "self": "None",
+    "example": "event_map_load_end local.map_name local.gametype:\n    iprintlnbold(\"Map \" + local.map_name + \" loaded\")\nend"
+  },
+  "map_change_start": {
+    "name": "map_change_start",
+    "description": "A map change has started.",
+    "category": "map",
+    "parameters": [
+      { "name": "local.current_map", "description": "Current map name" },
+      { "name": "local.next_map", "description": "Next map name" }
+    ],
+    "self": "None",
+    "example": "event_map_change_start local.current_map local.next_map:\n    iprintlnbold(\"Changing from \" + local.current_map + \" to \" + local.next_map)\nend"
+  },
+  "map_restart": {
+    "name": "map_restart",
+    "description": "The map was restarted.",
+    "category": "map",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" }
+    ],
+    "self": "None",
+    "example": "event_map_restart local.map_name:\n    iprintlnbold(\"Map \" + local.map_name + \" restarted\")\nend"
+  },
+  "game_init": {
+    "name": "game_init",
+    "description": "The game has been initialized.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.gametype", "description": "Game type integer" }
+    ],
+    "self": "None",
+    "example": "event_game_init local.gametype:\n    iprintlnbold(\"Game initialized with gametype \" + local.gametype)\nend"
+  },
+  "game_start": {
+    "name": "game_start",
+    "description": "The game has started.",
+    "category": "game",
+    "parameters": [],
+    "self": "None",
+    "example": "event_game_start:\n    iprintlnbold(\"Game started!\")\nend"
+  },
+  "game_end": {
+    "name": "game_end",
+    "description": "The game has ended.",
+    "category": "game",
+    "parameters": [],
+    "self": "None",
+    "example": "event_game_end:\n    iprintlnbold(\"Game ended!\")\nend"
+  },
+  "round_start": {
+    "name": "round_start",
+    "description": "A round has started.",
+    "category": "game",
+    "parameters": [],
+    "self": "None",
+    "example": "event_round_start:\n    iprintlnbold(\"Round started!\")\nend"
+  },
+  "round_end": {
+    "name": "round_end",
+    "description": "A round has ended.",
+    "category": "game",
+    "parameters": [],
+    "self": "None",
+    "example": "event_round_end:\n    iprintlnbold(\"Round ended!\")\nend"
+  },
+  "team_win": {
+    "name": "team_win",
+    "description": "A team has won.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.winning_team_num", "description": "The winning team number" }
+    ],
+    "self": "None",
+    "example": "event_team_win local.winning_team_num:\n    iprintlnbold(\"Team \" + local.winning_team_num + \" wins!\")\nend"
+  },
+  "match_end": {
+    "name": "match_end",
+    "description": "The match has ended.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" },
+      { "name": "local.gametype", "description": "Game type integer" },
+      { "name": "local.winning_team", "description": "The winning team" }
+    ],
+    "self": "None",
+    "example": "event_match_end local.map_name local.gametype local.winning_team:\n    iprintlnbold(\"Match ended on \" + local.map_name)\nend"
+  },
+  "intermission_start": {
+    "name": "intermission_start",
+    "description": "Intermission has begun.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" },
+      { "name": "local.gametype", "description": "Game type integer" }
+    ],
+    "self": "None",
+    "example": "event_intermission_start local.map_name local.gametype:\n    // Intermission has begun\nend"
+  },
+  "warmup_start": {
+    "name": "warmup_start",
+    "description": "Warmup period has begun.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" }
+    ],
+    "self": "None",
+    "example": "event_warmup_start local.map_name:\n    iprintlnbold(\"Warmup started on \" + local.map_name)\nend"
+  },
+  "warmup_end": {
+    "name": "warmup_end",
+    "description": "Warmup period has ended.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.map_name", "description": "Name of the map" }
+    ],
+    "self": "None",
+    "example": "event_warmup_end local.map_name:\n    iprintlnbold(\"Warmup ended on \" + local.map_name)\nend"
+  },
+  "objective_update": {
+    "name": "objective_update",
+    "description": "An objective status has changed.",
+    "category": "game",
+    "parameters": [
+      { "name": "local.objective_index", "description": "Index of the objective" },
+      { "name": "local.new_status", "description": "New status value" }
+    ],
+    "self": "None",
+    "example": "event_objective_update local.objective_index local.new_status:\n    iprintlnbold(\"Objective \" + local.objective_index + \" changed to \" + local.new_status)\nend"
+  },
+  "team_join": {
+    "name": "team_join",
+    "description": "A player changed teams.",
+    "category": "team",
+    "parameters": [
+      { "name": "local.old_team", "description": "Previous team" },
+      { "name": "local.new_team", "description": "New team" }
+    ],
+    "self": "The player",
+    "example": "event_team_join local.old_team local.new_team:\n    iprintlnbold(self.netname + \" changed from team \" + local.old_team + \" to \" + local.new_team)\nend"
+  },
+  "vote_start": {
+    "name": "vote_start",
+    "description": "A vote has started.",
+    "category": "team",
+    "parameters": [
+      { "name": "local.vote_name", "description": "Name of the vote type" },
+      { "name": "local.vote_string", "description": "The vote string" }
+    ],
+    "self": "The player who started the vote",
+    "example": "event_vote_start local.vote_name local.vote_string:\n    iprintlnbold(self.netname + \" started vote: \" + local.vote_name)\nend"
+  },
+  "vote_passed": {
+    "name": "vote_passed",
+    "description": "A vote has passed.",
+    "category": "team",
+    "parameters": [
+      { "name": "local.vote_name", "description": "Name of the vote type" },
+      { "name": "local.vote_string", "description": "The vote string" },
+      { "name": "local.yes_count", "description": "Number of yes votes" },
+      { "name": "local.no_count", "description": "Number of no votes" }
+    ],
+    "self": "None",
+    "example": "event_vote_passed local.vote_name local.vote_string local.yes_count local.no_count:\n    iprintlnbold(\"Vote passed: \" + local.vote_name + \" (\" + local.yes_count + \" yes, \" + local.no_count + \" no)\")\nend"
+  },
+  "vote_failed": {
+    "name": "vote_failed",
+    "description": "A vote has failed.",
+    "category": "team",
+    "parameters": [
+      { "name": "local.vote_name", "description": "Name of the vote type" },
+      { "name": "local.fail_reason", "description": "Reason for failure ('timeout', 'rejected')" },
+      { "name": "local.yes_count", "description": "Number of yes votes" },
+      { "name": "local.no_count", "description": "Number of no votes" }
+    ],
+    "self": "None",
+    "example": "event_vote_failed local.vote_name local.fail_reason local.yes_count local.no_count:\n    iprintlnbold(\"Vote failed: \" + local.vote_name + \" (\" + local.fail_reason + \")\")\nend"
+  },
+  "objective_capture": {
+    "name": "objective_capture",
+    "description": "A TOW objective was captured.",
+    "category": "team",
+    "parameters": [
+      { "name": "local.controller_team", "description": "The team that captured it" }
+    ],
+    "self": "The objective entity",
+    "example": "event_objective_capture local.controller_team:\n    iprintlnbold(\"Objective captured by team \" + local.controller_team)\nend"
+  },
+  "client_connect": {
+    "name": "client_connect",
+    "description": "A client connected. Player entity not yet created.",
+    "category": "client",
+    "parameters": [
+      { "name": "local.client_num", "description": "Client number" }
+    ],
+    "self": "None (player entity not yet created)",
+    "example": "event_client_connect local.client_num:\n    iprintlnbold(\"Client \" + local.client_num + \" connected\")\nend"
+  },
+  "client_begin": {
+    "name": "client_begin",
+    "description": "A client began (entered the game).",
+    "category": "client",
+    "parameters": [],
+    "self": "The player entity",
+    "example": "event_client_begin:\n    iprintlnbold(self.netname + \" began\")\nend"
+  },
+  "client_userinfo_changed": {
+    "name": "client_userinfo_changed",
+    "description": "A client's userinfo changed.",
+    "category": "client",
+    "parameters": [],
+    "self": "The player entity",
+    "example": "event_client_userinfo_changed:\n    iprintlnbold(self.netname + \" changed userinfo\")\nend"
+  },
+  "client_disconnect": {
+    "name": "client_disconnect",
+    "description": "A client disconnected.",
+    "category": "client",
+    "parameters": [],
+    "self": "The player entity",
+    "example": "event_client_disconnect:\n    iprintlnbold(self.netname + \" disconnected\")\nend"
+  },
+  "player_inactivity_drop": {
+    "name": "player_inactivity_drop",
+    "description": "A player was dropped for inactivity.",
+    "category": "client",
+    "parameters": [],
+    "self": "The player entity",
+    "example": "event_player_inactivity_drop:\n    iprintlnbold(self.netname + \" was dropped for inactivity\")\nend"
+  },
+  "door_open": {
+    "name": "door_open",
+    "description": "A door was opened.",
+    "category": "world",
+    "parameters": [
+      { "name": "local.activator", "description": "Entity that opened the door" }
+    ],
+    "self": "The door entity",
+    "example": "event_door_open local.activator:\n    // Door was opened\nend"
+  },
+  "door_close": {
+    "name": "door_close",
+    "description": "A door was closed.",
+    "category": "world",
+    "parameters": [],
+    "self": "The door entity",
+    "example": "event_door_close:\n    // Door was closed\nend"
+  },
+  "explosion": {
+    "name": "explosion",
+    "description": "An explosion occurred.",
+    "category": "world",
+    "parameters": [
+      { "name": "local.attacker", "description": "Entity that caused the explosion" },
+      { "name": "local.damage", "description": "Explosion damage" }
+    ],
+    "self": "The explosion entity",
+    "example": "event_explosion local.attacker local.damage:\n    // Explosion occurred\nend"
+  },
+  "actor_spawn": {
+    "name": "actor_spawn",
+    "description": "An AI actor spawned.",
+    "category": "ai",
+    "parameters": [],
+    "self": "The actor entity",
+    "example": "event_actor_spawn:\n    // AI actor spawned\nend"
+  },
+  "actor_killed": {
+    "name": "actor_killed",
+    "description": "An AI actor was killed.",
+    "category": "ai",
+    "parameters": [
+      { "name": "local.attacker", "description": "Entity that killed the actor" }
+    ],
+    "self": "The actor entity",
+    "example": "event_actor_killed local.attacker:\n    // AI actor was killed\nend"
+  },
+  "bot_spawn": {
+    "name": "bot_spawn",
+    "description": "A bot spawned.",
+    "category": "ai",
+    "parameters": [],
+    "self": "The bot player entity",
+    "example": "event_bot_spawn:\n    iprintlnbold(\"Bot spawned\")\nend"
+  },
+  "bot_killed": {
+    "name": "bot_killed",
+    "description": "A bot was killed.",
+    "category": "ai",
+    "parameters": [
+      { "name": "local.attacker", "description": "Entity that killed the bot" }
+    ],
+    "self": "The bot player entity",
+    "example": "event_bot_killed local.attacker:\n    iprintlnbold(\"Bot killed by \" + local.attacker.netname)\nend"
+  },
+  "bot_roam": {
+    "name": "bot_roam",
+    "description": "A bot entered roaming state.",
+    "category": "ai",
+    "parameters": [],
+    "self": "The bot player entity",
+    "example": "event_bot_roam:\n    // Bot entered roaming state\nend"
+  },
+  "bot_curious": {
+    "name": "bot_curious",
+    "description": "A bot entered curious state.",
+    "category": "ai",
+    "parameters": [],
+    "self": "The bot player entity",
+    "example": "event_bot_curious:\n    // Bot entered curious state\nend"
+  },
+  "bot_attack": {
+    "name": "bot_attack",
+    "description": "A bot entered attack state.",
+    "category": "ai",
+    "parameters": [],
+    "self": "The bot player entity",
+    "example": "event_bot_attack:\n    // Bot entered attack state\nend"
+  },
+  "score_change": {
+    "name": "score_change",
+    "description": "A player's score changed.",
+    "category": "score",
+    "parameters": [
+      { "name": "local.score_type", "description": "'kills' or 'deaths'" },
+      { "name": "local.delta", "description": "Amount changed" },
+      { "name": "local.new_total", "description": "New total value" }
+    ],
+    "self": "The player",
+    "example": "event_score_change local.score_type local.delta local.new_total:\n    iprintlnbold(self.netname + \" \" + local.score_type + \" changed by \" + local.delta + \" to \" + local.new_total)\nend"
+  },
+  "teamkill_kick": {
+    "name": "teamkill_kick",
+    "description": "A player was kicked for excessive team killing.",
+    "category": "score",
+    "parameters": [
+      { "name": "local.teamkill_count", "description": "Number of team kills" }
+    ],
+    "self": "The player who was kicked",
+    "example": "event_teamkill_kick local.teamkill_count:\n    iprintlnbold(self.netname + \" kicked for \" + local.teamkill_count + \" team kills\")\nend"
+  }
+}

@@ -10,15 +10,13 @@
 module.exports = grammar({
   name: 'morpheus',
 
-  // External scanner for complex tokens
+  // External scanner for line continuation
   externals: $ => [
     $._line_continuation,
-    $.unquoted_string,
-    $.file_path,
   ],
 
   extras: $ => [
-    /\s/,
+    /[\s\r]/,
     $.comment,
     $._line_continuation,
   ],
@@ -26,61 +24,109 @@ module.exports = grammar({
   word: $ => $.identifier,
 
   conflicts: $ => [
-    [$.call_expression, $.binary_expression],
-    [$.primary_expression, $.assignment_expression],
+    [$.primary_expression, $.call_expression],
+    [$.ternary_expression, $.argument_list],
+    [$.argument_list, $.const_array],
+    [$.call_expression],
+    [$.ternary_expression, $.const_array],
+    [$.const_array],
+    [$.scope_keyword, $.self_reference],
+    [$.primary_expression, $._vector_component],
+    [$.end_statement, $.early_return],
+    [$.parameter_list, $.primary_expression],
   ],
 
   rules: {
-    // Entry point - a script file
-    source_file: $ => repeat($._statement),
+    // Entry point - a script file contains thread definitions and/or top-level statements
+    // Morpheus allows "main" code at the script level that runs when the script is exec'd
+    source_file: $ => repeat(choice(
+      $.thread_definition,
+      $._top_level_statement,
+    )),
+
+    // Top-level statements that can appear outside of threads
+    _top_level_statement: $ => choice(
+      $.if_statement,
+      $.for_statement,
+      $.while_statement,
+      $.switch_statement,
+      $.try_statement,
+      $.expression_statement,
+      $.empty_statement,
+    ),
+
+    // ==================== THREAD STRUCTURE ====================
+
+    // Thread definition: mythread local.param1 local.param2:
+    //   body statements
+    // end
+    // Use high precedence to prefer thread definition over expression_statement
+    // when we see `identifier [scoped_variable...] :`
+    thread_definition: $ => prec(10, seq(
+      field('name', $.identifier),
+      optional(field('parameters', $.parameter_list)),
+      ':',
+      field('body', $.thread_body),
+    )),
+
+    parameter_list: $ => repeat1($.scoped_variable),
+
+    // Thread body contains statements and ends with 'end'
+    thread_body: $ => seq(
+      repeat($._block_statement),
+      $.end_statement,
+    ),
+
+    // End statement terminates a thread (optionally with return value)
+    // The return value should be simple (variable or literal), not a complex expression
+    // Use prec(-1) to avoid consuming the next thread's identifier
+    end_statement: $ => seq(
+      'end',
+      optional(prec(-1, field('value', choice(
+        $.scoped_variable,
+        $.identifier,
+        $.number,
+        $.string,
+        $.nil,
+      )))),
+    ),
 
     // ==================== STATEMENTS ====================
 
-    _statement: $ => choice(
-      $.thread_definition,
+    // Statements that can appear inside a thread body (not 'end')
+    _block_statement: $ => choice(
       $.labeled_statement,
       $.if_statement,
       $.for_statement,
       $.while_statement,
       $.switch_statement,
       $.try_statement,
-      $.return_statement,
       $.break_statement,
       $.continue_statement,
       $.goto_statement,
-      $.end_statement,
+      $.early_return,
       $.expression_statement,
       $.empty_statement,
     ),
 
-    // Thread definition: mythread local.param1 local.param2:
-    thread_definition: $ => seq(
-      field('name', $.identifier),
-      optional(field('parameters', $.parameter_list)),
-      ':',
-      field('body', $.block),
-    ),
-
-    parameter_list: $ => repeat1($.scoped_variable),
-
-    // Labeled statement for goto targets
-    labeled_statement: $ => seq(
+    // Labeled statement for goto targets inside threads
+    labeled_statement: $ => prec.right(seq(
       field('label', $.identifier),
       ':',
-      optional($._statement),
-    ),
+      optional($._block_statement),
+    )),
 
-    // Block of statements (implicit via end or next thread)
-    block: $ => repeat1($._statement),
+    // Block of statements for control flow (if/for/while)
+    block: $ => prec.left(repeat1($._block_statement)),
 
     // Empty statement
     empty_statement: $ => ';',
 
-    // Expression statement
-    expression_statement: $ => seq(
+    // Expression statement - use prec.right to greedily consume optional semicolon
+    expression_statement: $ => prec.right(seq(
       $._expression,
       optional(';'),
-    ),
+    )),
 
     // if/else statement
     if_statement: $ => prec.right(seq(
@@ -94,8 +140,8 @@ module.exports = grammar({
     )),
 
     block_or_statement: $ => choice(
-      seq('{', repeat($._statement), '}'),
-      $._statement,
+      seq('{', repeat($._block_statement), '}'),
+      $._block_statement,
     ),
 
     // for loop
@@ -132,14 +178,13 @@ module.exports = grammar({
       'case',
       field('value', $._expression),
       ':',
-      repeat($._statement),
-      optional('break'),
+      repeat($._block_statement),
     ),
 
     default_case: $ => seq(
       'default',
       ':',
-      repeat($._statement),
+      repeat($._block_statement),
     ),
 
     // try/catch statement
@@ -150,21 +195,17 @@ module.exports = grammar({
       field('handler', $.block_or_statement),
     ),
 
-    // return/end
-    return_statement: $ => seq(
-      'end',
-      optional(field('value', $._expression)),
-    ),
-
     break_statement: $ => 'break',
     continue_statement: $ => 'continue',
+
+    // Early return (end used inside blocks for early exit, typically without return value)
+    // Thread-level end with return value is handled by end_statement
+    early_return: $ => prec(-2, 'end'),
 
     goto_statement: $ => seq(
       'goto',
       field('label', $.identifier),
     ),
-
-    end_statement: $ => 'end',
 
     // ==================== EXPRESSIONS ====================
 
@@ -172,11 +213,13 @@ module.exports = grammar({
       $.assignment_expression,
       $.binary_expression,
       $.unary_expression,
+      $.update_expression,
       $.call_expression,
       $.member_expression,
       $.subscript_expression,
       $.primary_expression,
       $.const_array,
+      $.make_array,
       $.parenthesized_expression,
       $.ternary_expression,
     ),
@@ -185,6 +228,7 @@ module.exports = grammar({
       $.identifier,
       $.scoped_variable,
       $.entity_reference,
+      $.self_reference,
       $.number,
       $.string,
       $.nil,
@@ -205,21 +249,33 @@ module.exports = grammar({
       field('right', $._expression),
     )),
 
-    // Binary expressions with precedence
+    // Binary expressions with precedence (C-style: higher number = higher precedence)
+    // See: https://en.cppreference.com/w/c/language/operator_precedence
     binary_expression: $ => choice(
-      prec.left(2, seq($._expression, '||', $._expression)),
-      prec.left(3, seq($._expression, '&&', $._expression)),
-      prec.left(4, seq($._expression, choice('==', '!=', '<', '>', '<=', '>='), $._expression)),
-      prec.left(5, seq($._expression, choice('+', '-'), $._expression)),
-      prec.left(6, seq($._expression, choice('*', '/', '%'), $._expression)),
-      prec.left(7, seq($._expression, choice('&', '|', '^'), $._expression)),
+      prec.left(2, seq($._expression, '||', $._expression)),                                      // Logical OR: lowest
+      prec.left(3, seq($._expression, '&&', $._expression)),                                      // Logical AND
+      prec.left(4, seq($._expression, '|', $._expression)),                                       // Bitwise OR
+      prec.left(5, seq($._expression, '^', $._expression)),                                       // Bitwise XOR
+      prec.left(6, seq($._expression, '&', $._expression)),                                       // Bitwise AND
+      prec.left(7, seq($._expression, choice('==', '!='), $._expression)),                        // Equality
+      prec.left(8, seq($._expression, choice('<', '>', '<=', '>='), $._expression)),              // Relational
+      prec.left(9, seq($._expression, choice('+', '-'), $._expression)),                          // Additive
+      prec.left(10, seq($._expression, choice('*', '/', '%'), $._expression)),                    // Multiplicative: highest
     ),
 
-    // Unary expressions
-    unary_expression: $ => prec.right(8, seq(
+    // Unary expressions (higher precedence than all binary operators)
+    unary_expression: $ => prec.right(11, seq(
       choice('!', '-', '~'),
       $._expression,
     )),
+
+    // Update expressions (increment/decrement)
+    update_expression: $ => choice(
+      prec.left(12, seq($._expression, '++')),
+      prec.left(12, seq($._expression, '--')),
+      prec.right(12, seq('++', $._expression)),
+      prec.right(12, seq('--', $._expression)),
+    ),
 
     // Ternary expression: cond ? true : false
     ternary_expression: $ => prec.right(0, seq(
@@ -231,18 +287,33 @@ module.exports = grammar({
     )),
 
     // Function/method call: entity functionname arg1 arg2
-    call_expression: $ => prec.left(9, seq(
-      optional(field('target', choice(
-        $.scoped_variable,
-        $.entity_reference,
-        $.member_expression,
-        $.identifier,
-      ))),
-      field('function', $.identifier),
-      optional(field('arguments', $.argument_list)),
-    )),
+    call_expression: $ => choice(
+      // Function call with arguments
+      prec.left(15, seq(
+        optional(field('target', choice(
+          $.scoped_variable,
+          $.entity_reference,
+          $.member_expression,
+          $.self_reference,
+          $.identifier,
+        ))),
+        field('function', $.identifier),
+        field('arguments', $.argument_list),
+      )),
+      // Function call without arguments
+      prec.left(10, seq(
+        optional(field('target', choice(
+          $.scoped_variable,
+          $.entity_reference,
+          $.member_expression,
+          $.self_reference,
+          $.identifier,
+        ))),
+        field('function', $.identifier),
+      )),
+    ),
 
-    argument_list: $ => repeat1($._expression),
+    argument_list: $ => prec.right(20, repeat1($._expression)),
 
     // Member access: entity.property
     member_expression: $ => prec.left(10, seq(
@@ -265,9 +336,16 @@ module.exports = grammar({
       repeat1(seq('::', $._expression)),
     )),
 
+    // Make array: makeArray expr1 expr2 ... endArray
+    make_array: $ => seq(
+      'makeArray',
+      repeat($._expression),
+      'endArray',
+    ),
+
     // ==================== VARIABLES ====================
 
-    // Scoped variables: local.var, level.var, game.var, group.var, parm.var
+    // Scoped variables: local.var, level.var, game.var, group.var, parm.var, self.var, owner.var
     scoped_variable: $ => seq(
       field('scope', $.scope_keyword),
       '.',
@@ -283,6 +361,10 @@ module.exports = grammar({
       'self',
       'owner',
     ),
+
+    // Self and owner can be used as standalone entity references
+    // Level, game, and group can also be used as targets for commands
+    self_reference: $ => choice('self', 'owner', 'level', 'game', 'group'),
 
     // Entity reference: $entityname or $("dynamic")
     entity_reference: $ => choice(
@@ -319,13 +401,23 @@ module.exports = grammar({
 
     boolean: $ => choice('true', 'false'),
 
-    // Vector literal: (x y z)
-    vector: $ => seq(
+    // Vector literal: (x y z) - can contain numbers, variables, or expressions
+    // Use high precedence to prefer vector over parenthesized expression when 3 components
+    vector: $ => prec(15, seq(
       '(',
-      $.number,
-      $.number,
-      $.number,
+      $._vector_component,
+      $._vector_component,
+      $._vector_component,
       ')',
+    )),
+
+    // Vector components can be numbers, negated numbers, or scoped variables
+    _vector_component: $ => choice(
+      $.number,
+      $.scoped_variable,
+      $.self_reference,
+      $.identifier,
+      seq('-', $.number),
     ),
 
     // ==================== COMMENTS ====================
@@ -333,10 +425,8 @@ module.exports = grammar({
     comment: $ => choice(
       // Line comment
       seq('//', /.*/),
-      // Block comment
-      seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/'),
-      // Doc comment
-      seq('/**', /[^*]*\*+([^/*][^*]*\*+)*/, '/'),
+      // Block comment (/* ... */) - matches any content between /* and */
+      /\/\*[^*]*\*+(?:[^/*][^*]*\*+)*\//,
     ),
   },
 });

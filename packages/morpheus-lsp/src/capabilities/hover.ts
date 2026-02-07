@@ -1,5 +1,8 @@
 /**
  * Hover provider for Morpheus Script
+ * 
+ * Provides hover information for functions, keywords, and properties.
+ * Uses tree-sitter for accurate word range detection when available.
  */
 
 import {
@@ -9,8 +12,11 @@ import {
   Range,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
+import Parser from 'web-tree-sitter';
 import {
   FunctionDatabaseLoader,
+  EventDatabaseLoader,
+  EVENT_CATEGORY_LABELS,
   SCOPE_KEYWORDS,
   CONTROL_KEYWORDS,
   LEVEL_PROPERTIES,
@@ -18,19 +24,70 @@ import {
   PARM_PROPERTIES,
   ENTITY_PROPERTIES,
 } from '../data/database';
+import { EventCategory } from '../data/types';
+import {
+  isInitialized,
+  nodeToRange,
+  positionToPoint,
+} from '../parser/treeSitterParser';
 
 export class HoverProvider {
+  private documentManager: { getTree(uri: string): Parser.Tree | null } | null = null;
+  private eventDb: EventDatabaseLoader | null = null;
+
   constructor(private db: FunctionDatabaseLoader) {}
+
+  /**
+   * Set the document manager for tree-sitter access.
+   */
+  setDocumentManager(manager: { getTree(uri: string): Parser.Tree | null }): void {
+    this.documentManager = manager;
+  }
+
+  /**
+   * Set the event database for event hover information.
+   */
+  setEventDatabase(eventDb: EventDatabaseLoader): void {
+    this.eventDb = eventDb;
+  }
 
   /**
    * Provide hover information at the given position
    */
   provideHover(document: TextDocument, position: Position): Hover | null {
-    const wordRange = this.getWordRangeAtPosition(document, position);
-    if (!wordRange) return null;
+    const tree = this.documentManager?.getTree(document.uri);
+    
+    let word: string | null = null;
+    let wordRange: Range | null = null;
+    let nodeType: string | null = null;
+    let scopeContext: string | null = null;
 
-    const word = document.getText(wordRange);
-    if (!word) return null;
+    // Try tree-sitter first for accurate range
+    if (tree && isInitialized()) {
+      const result = this.getWordFromTree(tree, position);
+      if (result) {
+        word = result.word;
+        wordRange = result.range;
+        nodeType = result.nodeType;
+        scopeContext = result.scope;
+      }
+    }
+
+    // Fall back to regex-based word detection
+    if (!word || !wordRange) {
+      wordRange = this.getWordRangeAtPosition(document, position);
+      if (wordRange) {
+        word = document.getText(wordRange);
+      }
+    }
+
+    if (!word || !wordRange) return null;
+
+    // Check if this is an event name in event_subscribe call
+    const eventHover = this.checkForEventHover(document, position, wordRange, word);
+    if (eventHover) {
+      return eventHover;
+    }
 
     // Check for function
     const funcDoc = this.db.getFunction(word);
@@ -44,8 +101,8 @@ export class HoverProvider {
       };
     }
 
-    // Check for scope keyword
-    if (SCOPE_KEYWORDS.includes(word.toLowerCase())) {
+    // Check for scope keyword (with context from tree-sitter)
+    if (nodeType === 'scope_keyword' || SCOPE_KEYWORDS.includes(word.toLowerCase())) {
       return {
         contents: {
           kind: MarkupKind.Markdown,
@@ -66,8 +123,8 @@ export class HoverProvider {
       };
     }
 
-    // Check for property
-    const propertyInfo = this.getPropertyInfo(word);
+    // Check for property (with scope context if available)
+    const propertyInfo = this.getPropertyInfo(word, scopeContext);
     if (propertyInfo) {
       return {
         contents: {
@@ -82,7 +139,84 @@ export class HoverProvider {
   }
 
   /**
-   * Get the word range at the given position
+   * Get word and range from tree-sitter AST.
+   */
+  private getWordFromTree(
+    tree: Parser.Tree,
+    position: Position
+  ): { word: string; range: Range; nodeType: string; scope: string | null } | null {
+    const point = positionToPoint(position);
+    
+    // Try to get the exact node at position
+    const node = tree.rootNode.namedDescendantForPosition(point);
+    if (!node) return null;
+
+    // If we're on an identifier, use it directly
+    if (node.type === 'identifier') {
+      // Check if this identifier is part of a scoped_variable
+      let scope: string | null = null;
+      const parent = node.parent;
+      if (parent?.type === 'scoped_variable') {
+        const scopeNode = parent.childForFieldName('scope');
+        if (scopeNode) {
+          scope = scopeNode.text.toLowerCase();
+        }
+      }
+
+      return {
+        word: node.text,
+        range: nodeToRange(node),
+        nodeType: node.type,
+        scope,
+      };
+    }
+
+    // If we're on a scope_keyword, return it
+    if (node.type === 'scope_keyword') {
+      return {
+        word: node.text,
+        range: nodeToRange(node),
+        nodeType: node.type,
+        scope: null,
+      };
+    }
+
+    // Try to find an identifier among descendants
+    const adjustedPoint = { row: point.row, column: Math.max(0, point.column - 1) };
+    const exactNode = tree.rootNode.descendantForPosition(adjustedPoint);
+    
+    if (exactNode?.type === 'identifier') {
+      let scope: string | null = null;
+      const parent = exactNode.parent;
+      if (parent?.type === 'scoped_variable') {
+        const scopeNode = parent.childForFieldName('scope');
+        if (scopeNode) {
+          scope = scopeNode.text.toLowerCase();
+        }
+      }
+
+      return {
+        word: exactNode.text,
+        range: nodeToRange(exactNode),
+        nodeType: exactNode.type,
+        scope,
+      };
+    }
+
+    if (exactNode?.type === 'scope_keyword') {
+      return {
+        word: exactNode.text,
+        range: nodeToRange(exactNode),
+        nodeType: exactNode.type,
+        scope: null,
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Get the word range at the given position (regex fallback)
    */
   private getWordRangeAtPosition(document: TextDocument, position: Position): Range | null {
     const text = document.getText();
@@ -206,11 +340,25 @@ export class HoverProvider {
   }
 
   /**
-   * Get property information
+   * Get property information with optional scope context
    */
-  private getPropertyInfo(name: string): string | null {
+  private getPropertyInfo(name: string, scopeContext: string | null): string | null {
     const lowerName = name.toLowerCase();
 
+    // If we have scope context, provide more specific information
+    if (scopeContext === 'level' && LEVEL_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
+      return `**level.${name}**\n\nLevel property`;
+    }
+
+    if (scopeContext === 'game' && GAME_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
+      return `**game.${name}**\n\nGame property`;
+    }
+
+    if (scopeContext === 'parm' && PARM_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
+      return `**parm.${name}**\n\nParameter property`;
+    }
+
+    // Generic property lookup without scope context
     if (LEVEL_PROPERTIES.map(p => p.toLowerCase()).includes(lowerName)) {
       return `**${name}**\n\nLevel property (use with \`level.${name}\`)`;
     }
@@ -228,5 +376,123 @@ export class HoverProvider {
     }
 
     return null;
+  }
+
+  /**
+   * Check if we're hovering over an event name in event_subscribe call
+   */
+  private checkForEventHover(
+    document: TextDocument,
+    position: Position,
+    wordRange: Range,
+    word: string
+  ): Hover | null {
+    if (!this.eventDb) return null;
+
+    const text = document.getText();
+    const lineStart = document.offsetAt({ line: position.line, character: 0 });
+    const lineEnd = text.indexOf('\n', lineStart);
+    const lineText = text.substring(lineStart, lineEnd === -1 ? undefined : lineEnd);
+
+    // Check if we're in an event_subscribe call
+    const eventSubscribeMatch = lineText.match(/event_subscribe\s+["']([^"']+)["']/i);
+    if (eventSubscribeMatch) {
+      const eventName = eventSubscribeMatch[1];
+      const eventIndex = lineText.indexOf(eventName);
+      
+      // Check if the cursor is within the event name
+      const cursorCol = position.character;
+      if (cursorCol >= eventIndex && cursorCol <= eventIndex + eventName.length) {
+        const eventDoc = this.eventDb.getEvent(eventName);
+        if (eventDoc) {
+          return {
+            contents: {
+              kind: MarkupKind.Markdown,
+              value: this.formatEventHover(eventName, eventDoc),
+            },
+            range: {
+              start: { line: position.line, character: eventIndex },
+              end: { line: position.line, character: eventIndex + eventName.length },
+            },
+          };
+        }
+      }
+    }
+
+    // Also try looking up the word directly as an event name (if in a string)
+    const offset = document.offsetAt(position);
+    const textBefore = text.substring(Math.max(0, offset - 100), offset);
+    if (textBefore.match(/event_subscribe\s+["'][^"']*$/i)) {
+      const eventDoc = this.eventDb.getEvent(word);
+      if (eventDoc) {
+        return {
+          contents: {
+            kind: MarkupKind.Markdown,
+            value: this.formatEventHover(word, eventDoc),
+          },
+          range: wordRange,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Format event hover content
+   */
+  private formatEventHover(
+    name: string,
+    doc: {
+      name: string;
+      description: string;
+      category: EventCategory;
+      parameters: Array<{ name: string; description: string }>;
+      self: string;
+      example: string;
+    }
+  ): string {
+    const parts: string[] = [];
+    const categoryLabel = EVENT_CATEGORY_LABELS[doc.category] || doc.category;
+
+    // Header with event name and category
+    parts.push(`**Event:** \`${name}\``);
+    parts.push(`**Category:** ${categoryLabel}`);
+    parts.push('');
+
+    // Description
+    if (doc.description) {
+      parts.push(doc.description);
+    }
+
+    // Self reference
+    if (doc.self && doc.self !== 'None') {
+      parts.push('');
+      parts.push(`**self:** ${doc.self}`);
+    }
+
+    // Parameters
+    if (doc.parameters.length > 0) {
+      parts.push('');
+      parts.push('**Parameters:**');
+      for (const param of doc.parameters) {
+        parts.push(`- \`${param.name}\`: ${param.description}`);
+      }
+    } else {
+      parts.push('');
+      parts.push('**Parameters:** None');
+    }
+
+    // Example
+    if (doc.example) {
+      parts.push('');
+      parts.push('---');
+      parts.push('**Example:**');
+      parts.push('```morpheus');
+      parts.push(doc.example);
+      parts.push('```');
+    }
+
+    return parts.join('\n');
   }
 }
