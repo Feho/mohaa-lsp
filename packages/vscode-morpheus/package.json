@@ -229,7 +229,10 @@
       {
         "name": "morfuse",
         "owner": "morfuse",
-        "fileLocation": ["relative", "${workspaceFolder}"],
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
         "pattern": [
           {
             "regexp": "^([EW]): \\((.+), (\\d+)\\):$",
@@ -261,6 +264,8 @@
     "publish": "vsce publish"
   },
   "dependencies": {
+    "@vscode/debugadapter": "^1.68.0",
+    "@vscode/debugprotocol": "^1.68.0",
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {

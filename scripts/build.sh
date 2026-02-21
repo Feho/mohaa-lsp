@@ -77,7 +77,7 @@ fi
 # Build tree-sitter grammar
 log "Building tree-sitter-morpheus..."
 cd packages/tree-sitter-morpheus
-pnpm run generate
+pnpm run prepare
 pnpm run build
 success "tree-sitter-morpheus built"
 

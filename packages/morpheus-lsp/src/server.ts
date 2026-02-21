@@ -69,7 +69,7 @@ import { DocumentManager } from './parser/documentManager';
 import { SymbolIndex } from './parser/symbolIndex';
 
 // New capability imports
-import { SemanticTokensProvider, TOKEN_TYPES, TOKEN_MODIFIERS } from './capabilities/semanticTokens';
+import { SemanticTokensProvider, tokenTypes, tokenModifiers } from './capabilities/semanticTokens';
 import { InlayHintsProvider } from './capabilities/inlayHints';
 import { LinkedEditingRangesProvider } from './capabilities/linkedEditingRanges';
 import { FoldingRangesProvider } from './capabilities/foldingRanges';
@@ -211,8 +211,8 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
         full: true,
         range: true,
         legend: {
-          tokenTypes: [...TOKEN_TYPES],
-          tokenModifiers: [...TOKEN_MODIFIERS],
+          tokenTypes: [...tokenTypes],
+          tokenModifiers: [...tokenModifiers],
         },
       },
       inlayHintProvider: {
