@@ -145,7 +145,7 @@ connection.onInitialize(async (params: InitializeParams): Promise<InitializeResu
   staticAnalyzer = new StaticAnalyzer(symbolIndex, functionDb);
 
   // Initialize extended providers
-  semanticTokensProvider = new SemanticTokensProvider(symbolIndex, functionDb);
+  semanticTokensProvider = new SemanticTokensProvider(documentManager);
   inlayHintsProvider = new InlayHintsProvider(symbolIndex, functionDb);
   linkedEditingRangesProvider = new LinkedEditingRangesProvider();
   foldingRangesProvider = new FoldingRangesProvider();

@@ -2,7 +2,8 @@ import {
   SemanticTokensParams,
   SemanticTokens,
   SemanticTokensBuilder,
-  SemanticTokensLegend
+  SemanticTokensLegend,
+  Range,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import Parser from 'web-tree-sitter';
@@ -80,6 +81,33 @@ export class SemanticTokensProvider {
     this.visitNode(tree.rootNode, builder);
 
     return builder.build();
+  }
+
+  provideSemanticTokensRange(document: TextDocument, range: Range): SemanticTokens {
+    const builder = new SemanticTokensBuilder();
+    const tree = this.documentManager.getTree(document.uri);
+
+    if (!tree || !isInitialized()) {
+      return { data: [] };
+    }
+
+    this.visitNodeInRange(tree.rootNode, builder, range);
+
+    return builder.build();
+  }
+
+  private visitNodeInRange(node: Parser.SyntaxNode, builder: SemanticTokensBuilder, range: Range): void {
+    // Skip nodes entirely outside the range
+    if (node.endPosition.row < range.start.line ||
+        node.startPosition.row > range.end.line) {
+      return;
+    }
+
+    this.encodeNode(node, builder);
+
+    for (const child of node.children) {
+      this.visitNodeInRange(child, builder, range);
+    }
   }
 
   private visitNode(node: Parser.SyntaxNode, builder: SemanticTokensBuilder): void {
