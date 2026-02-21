@@ -14,6 +14,8 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { URI } from 'vscode-uri';
 import Parser from 'web-tree-sitter';
+import * as path from 'path';
+import * as fs from 'fs';
 import { DocumentManager } from '../parser/documentManager';
 import {
   isInitialized,
@@ -25,7 +27,16 @@ import {
 import { findContainingThread } from '../parser/queries';
 
 export class DefinitionProvider {
+  private workspaceFolders: string[] = [];
+
   constructor(private documentManager: DocumentManager) {}
+
+  /**
+   * Set workspace folders for cross-file resolution
+   */
+  setWorkspaceFolders(folders: string[]): void {
+    this.workspaceFolders = folders;
+  }
 
   /**
    * Escape special regex characters in a string
@@ -216,7 +227,7 @@ export class DefinitionProvider {
     // Check for cross-file reference: exec path.scr::label
     const crossFileMatch = this.getCrossFileReference(text, offset);
     if (crossFileMatch) {
-      return this.resolveCrossFileReference(crossFileMatch);
+      return this.resolveCrossFileReference(crossFileMatch, document.uri);
     }
 
     // Check for thread call pattern: thread threadname or waitthread threadname
@@ -450,24 +461,29 @@ export class DefinitionProvider {
   }
 
   /**
-   * Check for cross-file reference pattern (path.scr::label)
+   * Check for cross-file reference pattern (path/to/file.scr::label)
+   * Handles references like: global/tracker_common.scr::queue_event
    */
   private getCrossFileReference(text: string, offset: number): { file: string; label: string } | null {
-    // Look backwards and forwards from cursor to find pattern
+    // Look backwards and forwards from cursor to find the full reference pattern
+    // Valid characters: word chars, /, ., :, -, _
     let start = offset;
     let end = offset;
 
-    // Find the extent of the reference
-    while (start > 0 && /[\w/.:-]/.test(text[start - 1])) {
+    // Find the extent of the reference (including path separators and ::)
+    while (start > 0 && /[\w/.\-_:]/.test(text[start - 1])) {
       start--;
     }
 
-    while (end < text.length && /[\w/.:-]/.test(text[end])) {
+    while (end < text.length && /[\w/.\-_:]/.test(text[end])) {
       end++;
     }
 
     const reference = text.substring(start, end);
-    const match = reference.match(/^(.+\.scr)::(\w+)$/i);
+
+    // Match pattern: path/to/file.scr::threadname
+    // The path can include forward slashes and the file must end with .scr
+    const match = reference.match(/^([\w/.\-_]+\.scr)::(\w[\w@#'-]*)$/i);
 
     if (match) {
       return { file: match[1], label: match[2] };
@@ -478,30 +494,128 @@ export class DefinitionProvider {
 
   /**
    * Resolve cross-file reference to location
+   * Searches open documents first, then falls back to file system
    */
-  private resolveCrossFileReference(ref: { file: string; label: string }): Definition | null {
-    // In a real implementation, this would search the workspace
-    // for the referenced file and find the label within it
+  private resolveCrossFileReference(ref: { file: string; label: string }, currentUri?: string): Definition | null {
+    // First, try to find in already open documents
     const documents = this.documentManager.getAllDocuments();
 
     for (const doc of documents) {
-      if (doc.uri.toLowerCase().endsWith(ref.file.toLowerCase())) {
-        // Find the label in this document
-        const text = doc.getText();
-        const labelRegex = new RegExp(`^${this.escapeRegex(ref.label)}\\s*:`, 'm');
-        const match = labelRegex.exec(text);
+      if (this.uriMatchesPath(doc.uri, ref.file)) {
+        const location = this.findThreadInDocument(doc, ref.label);
+        if (location) return location;
+      }
+    }
 
-        if (match) {
-          const pos = doc.positionAt(match.index);
-          return Location.create(doc.uri, {
-            start: pos,
-            end: { line: pos.line, character: pos.character + ref.label.length },
-          });
-        }
+    // If not found in open documents, try to resolve from file system
+    if (currentUri) {
+      const resolvedUri = this.resolveFilePath(ref.file, currentUri);
+      if (resolvedUri) {
+        const location = this.findThreadInFile(resolvedUri, ref.label);
+        if (location) return location;
       }
     }
 
     return null;
+  }
+
+  /**
+   * Check if a document URI matches the given relative path
+   */
+  private uriMatchesPath(uri: string, relativePath: string): boolean {
+    // Normalize the paths for comparison
+    const normalizedPath = relativePath.replace(/\\/g, '/').toLowerCase();
+    const normalizedUri = uri.replace(/\\/g, '/').toLowerCase();
+
+    // Check if the URI ends with the relative path
+    return normalizedUri.endsWith(normalizedPath) ||
+           normalizedUri.endsWith('/' + normalizedPath);
+  }
+
+  /**
+   * Resolve a relative file path to an absolute URI
+   */
+  private resolveFilePath(relativePath: string, currentUri: string): string | null {
+    try {
+      const currentPath = URI.parse(currentUri).fsPath;
+      const currentDir = path.dirname(currentPath);
+
+      // Try relative to current file's directory
+      let candidates = [
+        path.resolve(currentDir, relativePath),
+        path.resolve(currentDir, '..', relativePath),
+      ];
+
+      // Try relative to workspace folders
+      for (const folder of this.workspaceFolders) {
+        candidates.push(path.resolve(folder, relativePath));
+        // Also try common game script directories
+        candidates.push(path.resolve(folder, 'scripts', relativePath));
+        candidates.push(path.resolve(folder, 'maps', relativePath));
+      }
+
+      // Find the first candidate that exists
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          return URI.file(candidate).toString();
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Find a thread definition in a TextDocument
+   */
+  private findThreadInDocument(doc: TextDocument, threadName: string): Location | null {
+    const text = doc.getText();
+    // Thread definition pattern: name at column 0 followed by optional params and colon
+    const threadRegex = new RegExp(`^(${this.escapeRegex(threadName)})\\s*(?:(?:local|group)\\.\\w+\\s*)*:`, 'mi');
+    const match = threadRegex.exec(text);
+
+    if (match) {
+      const pos = doc.positionAt(match.index);
+      return Location.create(doc.uri, {
+        start: pos,
+        end: { line: pos.line, character: pos.character + threadName.length },
+      });
+    }
+
+    return null;
+  }
+
+  /**
+   * Find a thread definition by reading a file from disk
+   */
+  private findThreadInFile(fileUri: string, threadName: string): Location | null {
+    try {
+      const filePath = URI.parse(fileUri).fsPath;
+      const content = fs.readFileSync(filePath, 'utf-8');
+
+      // Thread definition pattern: name at column 0 followed by optional params and colon
+      const threadRegex = new RegExp(`^(${this.escapeRegex(threadName)})\\s*(?:(?:local|group)\\.\\w+\\s*)*:`, 'mi');
+      const match = threadRegex.exec(content);
+
+      if (match) {
+        // Calculate position from offset
+        const beforeMatch = content.substring(0, match.index);
+        const lines = beforeMatch.split('\n');
+        const line = lines.length - 1;
+        const character = lines[lines.length - 1].length;
+
+        return Location.create(fileUri, {
+          start: { line, character },
+          end: { line, character: character + threadName.length },
+        });
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /**

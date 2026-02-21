@@ -35,11 +35,14 @@ import {
   CloseHandlerResult,
 } from 'vscode-languageclient/node';
 import { MorpheusDebugAdapter } from './debugAdapter';
+import { registerOpenMohaaDebug } from './debug/openMohaaDebug';
 import { MorfuseTaskProvider } from './taskProvider';
 
 let client: LanguageClient | undefined;
 
 export async function activate(context: ExtensionContext): Promise<void> {
+  registerOpenMohaaDebug(context);
+
   // Path to the language server (bundled in dist/server/)
   const serverModule = context.asAbsolutePath(
     path.join('dist', 'server', 'server.js')

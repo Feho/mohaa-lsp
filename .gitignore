@@ -1,15 +1,17 @@
 # Dependencies
 node_modules/
+package-lock.json
 
 # Build outputs
 dist/
 build/
 *.node
-*.wasm
 
-# Tree-sitter
-packages/tree-sitter-morpheus/src/
-!packages/tree-sitter-morpheus/src/scanner.c
+# Generated files in dist (but keep grammar/*.wasm)
+dist/**/*.wasm
+
+# Tree-sitter (keep grammar/src/ committed for pre-generated parser)
+# NOTE: Run `tree-sitter generate` in grammar/ after grammar.js changes
 
 # IDE
 .vscode/
@@ -29,5 +31,5 @@ pnpm-debug.log*
 # Testing
 coverage/
 
-# VS Code extension
-packages/vscode-morpheus/*.vsix
+# VS Code extension packages
+*.vsix

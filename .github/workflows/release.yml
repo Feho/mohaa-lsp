@@ -1,0 +1,75 @@
+name: Build and Release VS Code Extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+      
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+      
+      - name: Setup pnpm cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+      
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      
+      - name: Build all packages
+        run: pnpm build
+      
+      - name: Package VS Code extension
+        run: pnpm --filter vscode-morpheus package
+      
+      - name: Publish to VS Code Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: pnpm --filter vscode-morpheus publish
+      
+      - name: Find VSIX file
+        id: find-vsix
+        run: |
+          VSIX_FILE=$(find packages/vscode-morpheus -name "*.vsix" | head -n 1)
+          echo "vsix_path=$VSIX_FILE" >> $GITHUB_OUTPUT
+          echo "vsix_name=$(basename $VSIX_FILE)" >> $GITHUB_OUTPUT
+      
+      - name: Upload VSIX to release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ${{ steps.find-vsix.outputs.vsix_path }}
+          asset_name: ${{ steps.find-vsix.outputs.vsix_name }}
+          asset_content_type: application/vsix
+      
+      - name: Upload VSIX as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: vscode-extension
+          path: ${{ steps.find-vsix.outputs.vsix_path }}
+          retention-days: 30

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Language Server Protocol (LSP) implementation for MOHAA Morpheus Script (`.scr` files). Provides completions, hover documentation, go-to-definition, and diagnostics for Medal of Honor: Allied Assault scripting.
+Language Server Protocol (LSP) implementation for MOHAA Morpheus Script (`.scr` files). Provides completions, hover documentation, go-to-definition, diagnostics, and more for Medal of Honor: Allied Assault scripting.
 
 ## Build Commands
 
@@ -38,72 +38,73 @@ Language Server Protocol (LSP) implementation for MOHAA Morpheus Script (`.scr` 
 ### Manual Commands
 
 ```bash
-# Install dependencies (requires pnpm)
-pnpm install
+# Install dependencies
+npm install
 
-# Build all packages
-pnpm build
+# Build server and extension
+npm run build
 
-# Run tests
-pnpm test
+# Build and create .vsix package
+npm run package
 
 # Clean build artifacts
-pnpm clean
-```
-
-### Package-specific Commands
-
-**morpheus-lsp** (packages/morpheus-lsp):
-```bash
-pnpm run build     # Compile TypeScript + copy data files
-pnpm run watch     # Watch mode
-pnpm run test      # Run vitest
-```
-
-**tree-sitter-morpheus** (packages/tree-sitter-morpheus):
-```bash
-pnpm run generate  # Generate parser from grammar.js
-pnpm run build     # Generate + compile native bindings
-pnpm run test      # Run tree-sitter test corpus
-pnpm run parse <file.scr>  # Parse a file for debugging
-```
-
-**vscode-morpheus** (packages/vscode-morpheus):
-```bash
-pnpm run build     # Build extension with esbuild
-pnpm run package   # Create .vsix for distribution
+npm run clean
 ```
 
 ## Architecture
 
-### Monorepo Structure
+### Project Structure
 
-- `packages/tree-sitter-morpheus/` - Tree-sitter grammar defining Morpheus Script syntax
-- `packages/morpheus-lsp/` - LSP server implementation
-- `packages/vscode-morpheus/` - VS Code extension (language client)
-- `editors/` - Configuration for other editors (Neovim, Claude Code)
+```
+src/
+├── extension.ts          # VS Code extension entry point
+└── server/               # LSP server implementation
+    ├── server.ts         # LSP connection and capability registration
+    ├── capabilities/     # LSP feature providers
+    │   ├── completion.ts
+    │   ├── hover.ts
+    │   ├── definition.ts
+    │   └── ...
+    ├── data/             # Function database JSON files
+    │   ├── Morpheus.json
+    │   └── Reborn.json
+    └── parser/           # Document parsing and symbol tracking
+        ├── documentManager.ts
+        └── symbolIndex.ts
 
-### LSP Server (morpheus-lsp)
+grammar/                  # Tree-sitter grammar
+├── grammar.js            # Grammar definition
+├── src/                  # Generated parser (parser.c)
+├── queries/              # Syntax highlighting queries
+└── tree-sitter-morpheus.wasm
 
-Entry point: `src/server.ts` - creates LSP connection and wires up providers
+syntaxes/                 # TextMate grammar for basic highlighting
+images/                   # Extension icon
+```
 
-Key components:
-- `src/capabilities/completion.ts` - Context-aware completions (scope keywords, properties, functions)
-- `src/capabilities/hover.ts` - Function documentation on hover
-- `src/capabilities/definition.ts` - Go-to-definition for threads/labels
-- `src/parser/documentManager.ts` - Tracks open documents, parses threads/labels/variables
-- `src/data/database.ts` - Loads function definitions from JSON files
+### LSP Server (src/server/)
+
+Entry point: `src/server/server.ts` - creates LSP connection and wires up providers
+
+Key providers in `src/server/capabilities/`:
+- `completion.ts` - Context-aware completions (scope keywords, properties, functions)
+- `hover.ts` - Function documentation on hover
+- `definition.ts` - Go-to-definition for threads/labels
+- `references.ts` - Find all references to symbols
+- `callHierarchy.ts` - Incoming/outgoing call relationships
+- `semanticTokens.ts` - Semantic token highlighting
+- `inlayHints.ts` - Parameter name hints
 
 ### Function Database
 
-- `src/data/Morpheus.json` - 1,279 built-in functions (AA/SH/BT)
-- `src/data/Reborn.json` - 94 community patch functions (Reborn/NightFall)
+- `src/server/data/Morpheus.json` - 1,279 built-in functions (AA/SH/BT)
+- `src/server/data/Reborn.json` - 94 community patch functions (Reborn/NightFall)
 - Functions are tagged with game version compatibility and entity classes
 
 ### Tree-sitter Grammar
 
-- `grammar.js` - Grammar definition with rules for threads, expressions, statements
-- `corpus/basics.txt` - Test cases for parser validation
+- `grammar/grammar.js` - Grammar definition with rules for threads, expressions, statements
+- `grammar/corpus/basics.txt` - Test cases for parser validation
 - Supports thread definitions, scoped variables (`local.`, `level.`, `game.`), entity references (`$entity`)
 
 ## Morpheus Script Concepts

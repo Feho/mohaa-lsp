@@ -20,6 +20,8 @@ export interface MfuseValidatorConfig {
   commandsPath?: string;
   /** When to trigger validation */
   trigger: 'onSave' | 'onChange' | 'disabled';
+  /** Whether validation is enabled */
+  enabled: boolean;
 }
 
 /**
@@ -32,8 +34,8 @@ export async function validateWithMfuse(
   return new Promise<Diagnostic[]>((resolve) => {
     const diagnostics: Diagnostic[] = [];
 
-    // Check if mfuse is configured and exists
-    if (!config.execPath || !fs.existsSync(config.execPath)) {
+    // Check if validation is enabled and mfuse is configured
+    if (!config.enabled || !config.execPath || !fs.existsSync(config.execPath)) {
       resolve([]);
       return;
     }
@@ -185,7 +187,7 @@ export async function validateDirectory(
 ): Promise<Map<string, Diagnostic[]>> {
   const results = new Map<string, Diagnostic[]>();
 
-  if (!config.execPath || !fs.existsSync(config.execPath)) {
+  if (!config.enabled || !config.execPath || !fs.existsSync(config.execPath)) {
     return results;
   }
 
