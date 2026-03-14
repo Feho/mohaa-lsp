@@ -122,7 +122,9 @@ export class DataFlowAnalyzer {
       const line = lines[i];
 
       // Thread definition
-      const threadMatch = line.match(/^(\w[\w@#'-]*)\s*(?:\(([^)]*)\))?\s*:/);
+      // Morpheus Script thread params are space-separated: threadname local.p1 local.p2:
+      const threadMatch = line.match(/^(\w[\w@#'-]*)\s+((?:(?:local|group)\.\w+\s*)*):/) ||
+                           line.match(/^(\w[\w@#'-]*)\s*(?:\(([^)]*)\))?\s*:/);
       if (threadMatch) {
         if (currentThread) {
           currentThread.endLine = i - 1;
@@ -137,25 +139,52 @@ export class DataFlowAnalyzer {
           controlFlowPaths: [{ conditions: [], assignments: new Map() }],
         };
 
-        // Parse parameters
-        if (threadMatch[2]) {
-          const params = threadMatch[2].split(',').map(p => p.trim());
-          for (const param of params) {
-            const paramName = param.replace(/^local\./, '');
-            if (paramName) {
-              currentThread.variables.set(paramName, {
-                name: paramName,
-                scope: 'local',
-                definitionLine: i,
-                definitionRange: {
-                  start: { line: i, character: line.indexOf(paramName) },
-                  end: { line: i, character: line.indexOf(paramName) + paramName.length },
-                },
-                value: { type: 'unknown', possiblyNull: true },
-                reads: [],
-                writes: [],
-                isParameter: true,
-              });
+        // Parse parameters - supports both space-separated (local.x local.y) and paren-separated
+        const paramStr = threadMatch[2];
+        if (paramStr) {
+          // Try space-separated format first (local.param1 local.param2)
+          const spaceParams = paramStr.match(/(?:local|group)\.(\w+)/g);
+          if (spaceParams) {
+            for (const param of spaceParams) {
+              const paramName = param.replace(/^(?:local|group)\./, '');
+              if (paramName) {
+                const paramIdx = line.indexOf(param);
+                const nameIdx = paramIdx + param.length - paramName.length;
+                currentThread.variables.set(paramName, {
+                  name: paramName,
+                  scope: param.startsWith('group') ? 'group' : 'local',
+                  definitionLine: i,
+                  definitionRange: {
+                    start: { line: i, character: nameIdx },
+                    end: { line: i, character: nameIdx + paramName.length },
+                  },
+                  value: { type: 'unknown', possiblyNull: true },
+                  reads: [],
+                  writes: [],
+                  isParameter: true,
+                });
+              }
+            }
+          } else {
+            // Fall back to comma-separated in parentheses
+            const params = paramStr.split(',').map(p => p.trim());
+            for (const param of params) {
+              const paramName = param.replace(/^local\./, '');
+              if (paramName) {
+                currentThread.variables.set(paramName, {
+                  name: paramName,
+                  scope: 'local',
+                  definitionLine: i,
+                  definitionRange: {
+                    start: { line: i, character: line.indexOf(paramName) },
+                    end: { line: i, character: line.indexOf(paramName) + paramName.length },
+                  },
+                  value: { type: 'unknown', possiblyNull: true },
+                  reads: [],
+                  writes: [],
+                  isParameter: true,
+                });
+              }
             }
           }
         }
@@ -163,7 +192,7 @@ export class DataFlowAnalyzer {
       }
 
       // End of thread
-      if (/^\s*end\s*$/.test(line) && currentThread) {
+      if (/^\s*end\b/.test(line) && currentThread) {
         currentThread.endLine = i;
         threads.push(currentThread);
         currentThread = null;
@@ -172,8 +201,9 @@ export class DataFlowAnalyzer {
 
       if (!currentThread) continue;
 
-      // Variable assignment
-      const assignMatch = line.match(/(local|group|level|game)\.(\w+)\s*=\s*(.+)/);
+      // Variable assignment (including array subscript like local.arr[idx] = val)
+      // Use =(?!=) to avoid matching == (comparison) as assignment
+      const assignMatch = line.match(/(local|group|level|game)\.(\w+)(?:\[.*?\])?\s*=(?!=)\s*(.+)/);
       if (assignMatch) {
         const [, scope, varName, valueExpr] = assignMatch;
         const varKey = scope === 'local' ? varName : `${scope}.${varName}`;
@@ -210,9 +240,11 @@ export class DataFlowAnalyzer {
       const readPattern = /(local|group|level|game)\.(\w+)/g;
       let readMatch;
       while ((readMatch = readPattern.exec(line)) !== null) {
-        // Skip if this is the left side of an assignment
-        const beforeMatch = line.substring(0, readMatch.index + readMatch[0].length);
-        if (beforeMatch.match(new RegExp(`${readMatch[0]}\\s*=\\s*$`))) {
+        // Skip if this is the left side of an assignment (including array subscript, ++, --)
+        const afterMatch = line.substring(readMatch.index + readMatch[0].length);
+        if (/^\s*=(?!=)/.test(afterMatch) ||
+            /^\s*\[.*?\]\s*=(?!=)/.test(afterMatch) ||
+            /^\s*(\+\+|--)/.test(afterMatch)) {
           continue;
         }
 
@@ -263,8 +295,10 @@ export class DataFlowAnalyzer {
 
     for (const [varKey, varInfo] of thread.variables) {
       // Unused variable
+      // Skip level/game scope variables — they are inherently cross-thread/cross-file
       if (this.config.detectUnusedVariables) {
-        if (varInfo.reads.length === 0 && !varInfo.isParameter) {
+        if (varInfo.reads.length === 0 && !varInfo.isParameter &&
+            varInfo.scope !== 'level' && varInfo.scope !== 'game') {
           diagnostics.push({
             severity: DiagnosticSeverity.Warning,
             range: varInfo.definitionRange,
@@ -304,15 +338,39 @@ export class DataFlowAnalyzer {
           const write = varInfo.writes[i];
           const nextWrite = varInfo.writes[i + 1];
 
+          // Skip if either write is to an array subscript (e.g., local.arr[1] = x, local.arr[2] = y)
+          // These are writes to different elements, not overwrites of the same value
+          const writeLineText = lines[write.start.line] || '';
+          const nextWriteLineText = lines[nextWrite.start.line] || '';
+          const varFullName = `${varInfo.scope}.${varInfo.name}`;
+          const writeIsSubscript = new RegExp(`${varInfo.scope}\\.${varInfo.name}\\s*\\[`).test(writeLineText);
+          const nextWriteIsSubscript = new RegExp(`${varInfo.scope}\\.${varInfo.name}\\s*\\[`).test(nextWriteLineText);
+          if (writeIsSubscript || nextWriteIsSubscript) {
+            continue;
+          }
+
           // Check if there's a read between these writes
+          // A read on the same line as nextWrite counts as "between" because the RHS
+          // is evaluated before the assignment (e.g., local.x = local.x + 1)
           const hasReadBetween = varInfo.reads.some(r =>
-            (r.start.line > write.start.line || 
+            (r.start.line > write.start.line ||
              (r.start.line === write.start.line && r.start.character > write.start.character)) &&
-            (r.start.line < nextWrite.start.line ||
-             (r.start.line === nextWrite.start.line && r.start.character < nextWrite.start.character))
+            r.start.line <= nextWrite.start.line
           );
 
-          if (!hasReadBetween) {
+          // Also check if there's a read AFTER the next write (covers loop iterations
+          // where a write at the top of a loop body is read later in the same iteration,
+          // then written again on the next iteration)
+          const hasReadAfterNextWrite = varInfo.reads.some(r =>
+            r.start.line > nextWrite.start.line ||
+            (r.start.line === nextWrite.start.line && r.start.character > nextWrite.start.character)
+          );
+
+          // Check if writes are inside a loop — look for while/for between thread start and write
+          const writesInLoop = this.isInsideLoop(lines, write.start.line, thread.startLine) &&
+                               this.isInsideLoop(lines, nextWrite.start.line, thread.startLine);
+
+          if (!hasReadBetween && !(writesInLoop && hasReadAfterNextWrite)) {
             diagnostics.push({
               severity: DiagnosticSeverity.Hint,
               range: write,
@@ -327,6 +385,12 @@ export class DataFlowAnalyzer {
       // Always null check
       if (this.config.detectNullChecks && varInfo.value.type === 'null') {
         for (const read of varInfo.reads) {
+          // Skip if the read is a subscript access (NIL[index] is safe in Morpheus Script)
+          const readLineText = lines[read.start.line] || '';
+          if (new RegExp(`${varInfo.scope}\\.${varInfo.name}\\s*\\[`).test(readLineText)) {
+            continue;
+          }
+
           // Check if there's no write between definition and read
           const lastWriteBeforeRead = varInfo.writes
             .filter(w => w.start.line <= read.start.line)
@@ -353,6 +417,45 @@ export class DataFlowAnalyzer {
     }
 
     return diagnostics;
+  }
+
+  /**
+   * Check if a line is inside a loop (while/for) by tracking brace nesting
+   */
+  private isInsideLoop(lines: string[], targetLine: number, searchStart: number): boolean {
+    // Track a stack of block types: 'loop' or 'other'
+    const blockStack: string[] = [];
+    let pendingLoop = false;
+
+    for (let i = searchStart; i <= targetLine; i++) {
+      const line = lines[i];
+
+      // Check if this line starts a loop (the { may be on this line or the next)
+      if (/^\s*(while|for)\s*[\s(]/.test(line)) {
+        pendingLoop = true;
+      }
+
+      let hasBrace = false;
+      for (const ch of line) {
+        if (ch === '{') {
+          blockStack.push(pendingLoop ? 'loop' : 'other');
+          pendingLoop = false;
+          hasBrace = true;
+        } else if (ch === '}') {
+          blockStack.pop();
+          pendingLoop = false;
+          hasBrace = true;
+        }
+      }
+
+      // If pendingLoop is set but no brace was found on a non-empty, non-loop line,
+      // it's a brace-less loop body (single statement) — clear the flag
+      if (pendingLoop && !hasBrace && !/^\s*(while|for)\s*[\s(]/.test(line) && line.trim() !== '') {
+        pendingLoop = false;
+      }
+    }
+
+    return blockStack.some(b => b === 'loop');
   }
 
   /**

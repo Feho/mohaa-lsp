@@ -850,18 +850,26 @@ async function validateDocument(document: TextDocument, trigger: 'onSave' | 'onC
     }
 
     // Check for common operator mistakes (use lineWithoutComments to avoid false positives in comments)
+    // Only flag == when it appears to be the main assignment operator (not inside an expression RHS)
     const assignmentMatch = lineWithoutComments.match(/\b\w+\s*==\s*\w+/);
-    if (assignmentMatch && !lineWithoutComments.match(/if|while|for/)) {
+    if (assignmentMatch && !lineWithoutComments.match(/if|while|for|end\b/)) {
+      // Check if the == is actually inside the RHS of a = assignment (e.g., local.x = (a == b))
       const eqIdx = lineWithoutComments.indexOf('==');
-      diagnostics.push({
-        severity: DiagnosticSeverity.Warning,
-        range: {
-          start: { line: i, character: eqIdx },
-          end: { line: i, character: eqIdx + 2 },
-        },
-        message: `Using '==' for assignment. Did you mean '='?`,
-        source: 'morpheus-lsp',
-      });
+      const singleEqMatch = lineWithoutComments.match(/\b\w[\w.]*\s*=\s/);
+      const isInsideRHS = singleEqMatch && singleEqMatch.index !== undefined &&
+        (singleEqMatch.index + singleEqMatch[0].length - 1) < eqIdx;
+
+      if (!isInsideRHS) {
+        diagnostics.push({
+          severity: DiagnosticSeverity.Warning,
+          range: {
+            start: { line: i, character: eqIdx },
+            end: { line: i, character: eqIdx + 2 },
+          },
+          message: `Using '==' for assignment. Did you mean '='?`,
+          source: 'morpheus-lsp',
+        });
+      }
     }
 
     // Check for deprecated functions (use lineWithoutComments to avoid false positives in comments)

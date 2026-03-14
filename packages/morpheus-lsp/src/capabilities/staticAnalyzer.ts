@@ -126,17 +126,36 @@ export class StaticAnalyzer {
   private checkUndefinedThreadReferences(text: string, uri: string, document: TextDocument): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const lines = text.split('\n');
+    const commentRanges = this.getCommentRanges(text);
 
     // Find all thread call references
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      
+
       // Match thread calls: thread name, waitthread name
-      const threadCallMatches = line.matchAll(/\b(thread|waitthread)\s+(\w[\w@#'-]*)/gi);
+      // Include / and :: in the character class to capture cross-file references like global/path.scr::thread
+      const threadCallMatches = line.matchAll(/\b(thread|waitthread)\s+(\w[\w@#'./:=-]*)/gi);
       for (const match of threadCallMatches) {
-        const threadName = match[2];
+        // Skip if the match is inside a comment
+        if (this.isInComment(commentRanges, i, match.index!)) {
+          continue;
+        }
+
+        const fullRef = match[2];
+
+        // Skip cross-file references (e.g., global/path.scr::threadname)
+        if (fullRef.includes('/') || fullRef.includes('::')) {
+          continue;
+        }
+
+        // Skip dynamic thread references via variables (e.g., local.callback, level.handler)
+        if (/^(local|level|game|group|self|owner|parm)\./.test(fullRef)) {
+          continue;
+        }
+
+        const threadName = fullRef;
         const definition = this.symbolIndex.findDefinition(threadName);
-        
+
         if (!definition) {
           const startChar = line.indexOf(threadName, match.index!);
           diagnostics.push({
@@ -155,6 +174,11 @@ export class StaticAnalyzer {
       // Match exec calls with local references (not cross-file)
       const execMatches = line.matchAll(/\bexec\s+(\w[\w@#'-]*)\s*(?:\(|$|\s)/gi);
       for (const match of execMatches) {
+        // Skip if the match is inside a comment
+        if (this.isInComment(commentRanges, i, match.index!)) {
+          continue;
+        }
+
         const threadName = match[1];
         // Skip if it looks like a file path
         if (!threadName.includes('.') && !threadName.includes('/')) {
@@ -188,26 +212,31 @@ export class StaticAnalyzer {
     const lines = text.split('\n');
 
     // Collect all label definitions in this document
+    // In Morpheus Script, goto can jump to both labels inside threads AND thread names
     const labels = new Set<string>();
     let inThread = false;
-    
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trimStart();
-      
-      // Check for thread start
+
+      // Check for thread start — thread names are also valid goto targets
       const isAtColumnZero = line.length > 0 && line[0] !== ' ' && line[0] !== '\t';
-      if (isAtColumnZero && /^\w[\w@#'-]*\s*:/.test(line)) {
-        inThread = true;
-        continue;
+      if (isAtColumnZero) {
+        const threadMatch = /^(\w[\w@#'-]*)\s*.*:/.exec(line);
+        if (threadMatch) {
+          labels.add(threadMatch[1].toLowerCase());
+          inThread = true;
+          continue;
+        }
       }
-      
+
       // Check for end
       if (/^\s*end\b/.test(trimmed)) {
         inThread = false;
         continue;
       }
-      
+
       // Collect labels inside threads
       if (inThread) {
         const labelMatch = /^\s*(\w[\w@#'-]*)\s*:(?!:)/.exec(trimmed);
@@ -476,7 +505,8 @@ export class StaticAnalyzer {
       
       // Match potential function calls: identifier followed by (
       // But not preceded by thread/waitthread/exec (those are thread calls)
-      const funcCallMatches = line.matchAll(/(?<!thread\s+)(?<!waitthread\s+)(?<!exec\s+)\b([a-zA-Z_]\w*)\s*\(/g);
+      // Also exclude property access (preceded by .) like local.player(...)
+      const funcCallMatches = line.matchAll(/(?<!thread\s+)(?<!waitthread\s+)(?<!exec\s+)(?<!\.)(?<!\$)\b([a-zA-Z_]\w*)\s*\(/g);
       
       for (const match of funcCallMatches) {
         const funcName = match[1];
