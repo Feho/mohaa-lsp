@@ -1,0 +1,17 @@
+{
+  "name": "morpheus-lsp",
+  "description": "Morpheus Script language server for MOHAA .scr files",
+  "version": "0.1.0",
+  "author": {
+    "name": "MOHAA Community"
+  },
+  "lspServers": {
+    "morpheus-lsp": {
+      "command": "node",
+      "args": ["./packages/morpheus-lsp/dist/server.js", "--stdio"],
+      "extensionToLanguage": {
+        ".scr": "morpheus"
+      }
+    }
+  }
+}
