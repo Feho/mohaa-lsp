@@ -453,7 +453,13 @@ export class DataFlowAnalyzer {
           const writesInLoop = this.isInsideLoop(lines, write.start.line, thread.startLine) &&
                                this.isInsideLoop(lines, nextWrite.start.line, thread.startLine);
 
-          if (!hasReadBetween && !(writesInLoop && hasReadAfterNextWrite)) {
+          // Check if writes are in different branches of an if/else, or the first write
+          // is a default value conditionally overridden inside an if/else block.
+          // Detect by checking if there's an if/else between the two writes or if
+          // the next write is more deeply indented (inside a conditional block).
+          const writesInBranches = this.writesInDifferentBranches(lines, write.start.line, nextWrite.start.line);
+
+          if (!hasReadBetween && !(writesInLoop && hasReadAfterNextWrite) && !writesInBranches) {
             diagnostics.push({
               severity: DiagnosticSeverity.Hint,
               range: write,
@@ -539,6 +545,50 @@ export class DataFlowAnalyzer {
     }
 
     return blockStack.some(b => b === 'loop');
+  }
+
+  /**
+   * Check if two writes are in different branches of an if/else, or the first
+   * write is a default value that's conditionally overridden inside an if/else.
+   * Covers patterns like:
+   *   local.x = default; if (...) { local.x = a } else { local.x = b }
+   *   if (...) { local.x = a } else { local.x = b }
+   */
+  private writesInDifferentBranches(lines: string[], writeLine: number, nextWriteLine: number): boolean {
+    // If the next write is more indented than the first write, it's likely
+    // inside a conditional block (default-then-override pattern)
+    const writeIndent = this.getIndentLevel(lines[writeLine] || '');
+    const nextWriteIndent = this.getIndentLevel(lines[nextWriteLine] || '');
+    if (nextWriteIndent > writeIndent) {
+      // Check if there's an if/else between them
+      for (let j = writeLine + 1; j <= nextWriteLine; j++) {
+        if (/^\s*(if\s*\(|else\b)/.test(lines[j] || '')) {
+          return true;
+        }
+      }
+    }
+
+    // Check if both writes are inside different branches (if vs else)
+    // by looking for if/else structure around both writes
+    if (writeIndent === nextWriteIndent) {
+      for (let j = writeLine + 1; j <= nextWriteLine; j++) {
+        if (/^\s*else\b/.test(lines[j] || '')) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private getIndentLevel(line: string): number {
+    const match = line.match(/^(\s*)/);
+    if (!match) return 0;
+    let level = 0;
+    for (const ch of match[1]) {
+      level += ch === '\t' ? 4 : 1;
+    }
+    return level;
   }
 
   /**
