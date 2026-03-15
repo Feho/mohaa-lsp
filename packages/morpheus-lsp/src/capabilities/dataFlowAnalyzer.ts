@@ -397,6 +397,17 @@ export class DataFlowAnalyzer {
               continue;
             }
 
+            // Suppress when the variable appears in a comparison expression —
+            // the programmer is explicitly checking the value, which may intentionally
+            // be NIL (all local variables default to NIL in Morpheus Script)
+            const comparisonPattern = new RegExp(
+              `local\\.${varInfo.name}\\s*(==|!=|<|>|<=|>=)|` +
+              `(==|!=|<|>|<=|>=)\\s*local\\.${varInfo.name}`
+            );
+            if (comparisonPattern.test(readLineText)) {
+              continue;
+            }
+
             const hasWriteBefore = varInfo.writes.some(w =>
               w.start.line < read.start.line ||
               (w.start.line === read.start.line && w.start.character < read.start.character)
@@ -416,7 +427,8 @@ export class DataFlowAnalyzer {
       }
 
       // Dead stores (write without subsequent read)
-      if (this.config.detectDeadStores) {
+      // Skip level/game scope — these are cross-thread variables where overwrites are expected
+      if (this.config.detectDeadStores && varInfo.scope !== 'level' && varInfo.scope !== 'game') {
         for (let i = 0; i < varInfo.writes.length - 1; i++) {
           const write = varInfo.writes[i];
           const nextWrite = varInfo.writes[i + 1];
@@ -459,7 +471,10 @@ export class DataFlowAnalyzer {
           // the next write is more deeply indented (inside a conditional block).
           const writesInBranches = this.writesInDifferentBranches(lines, write.start.line, nextWrite.start.line);
 
-          if (!hasReadBetween && !(writesInLoop && hasReadAfterNextWrite) && !writesInBranches) {
+          // Check if both writes are inside different cases of a switch block
+          const writesInSwitch = this.writesInSwitchCases(lines, write.start.line, nextWrite.start.line, thread.startLine);
+
+          if (!hasReadBetween && !(writesInLoop && hasReadAfterNextWrite) && !writesInBranches && !writesInSwitch) {
             diagnostics.push({
               severity: DiagnosticSeverity.Hint,
               range: write,
@@ -477,6 +492,12 @@ export class DataFlowAnalyzer {
           // Skip if the read is a subscript access (NIL[index] is safe in Morpheus Script)
           const readLineText = lines[read.start.line] || '';
           if (new RegExp(`${varInfo.scope}\\.${varInfo.name}\\s*\\[`).test(readLineText)) {
+            continue;
+          }
+
+          // Suppress when the read line is explicitly checking for NIL — warning
+          // that a value "may be NIL" is redundant when the programmer is testing for it
+          if (/==\s*NIL|!=\s*NIL|NIL\s*==|NIL\s*!=/.test(readLineText)) {
             continue;
           }
 
@@ -562,7 +583,7 @@ export class DataFlowAnalyzer {
     if (nextWriteIndent > writeIndent) {
       // Check if there's an if/else between them
       for (let j = writeLine + 1; j <= nextWriteLine; j++) {
-        if (/^\s*(if\s*\(|else\b)/.test(lines[j] || '')) {
+        if (/^\s*}?\s*(if\s*\(|else\b)/.test(lines[j] || '')) {
           return true;
         }
       }
@@ -570,11 +591,55 @@ export class DataFlowAnalyzer {
 
     // Check if both writes are inside different branches (if vs else)
     // by looking for if/else structure around both writes
-    if (writeIndent === nextWriteIndent) {
+    // Covers both equal indent (sibling branches) and first-deeper (nested if/else-if/else)
+    // Also handles '} else {' and '} else if (...) {' patterns
+    {
       for (let j = writeLine + 1; j <= nextWriteLine; j++) {
-        if (/^\s*else\b/.test(lines[j] || '')) {
+        if (/^\s*}?\s*(else\b|else\s*if\b)/.test(lines[j] || '')) {
           return true;
         }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Check if two writes are inside different cases of a switch block.
+   * Each case branch is mutually exclusive so writes in different cases are not dead stores.
+   */
+  private writesInSwitchCases(lines: string[], writeLine: number, nextWriteLine: number, threadStart: number): boolean {
+    const writeIndent = this.getIndentLevel(lines[writeLine] || '');
+    const nextWriteIndent = this.getIndentLevel(lines[nextWriteLine] || '');
+
+    // Look for a switch statement before the first write at a lower indentation level
+    let switchFound = false;
+    for (let i = writeLine - 1; i >= threadStart; i--) {
+      const line = lines[i] || '';
+      const trimmed = line.trimStart();
+      const indent = this.getIndentLevel(line);
+
+      if (/^switch\s*[\s(]/.test(trimmed) && indent < writeIndent) {
+        switchFound = true;
+        break;
+      }
+
+      // If we hit something at a lower indent that isn't a switch/case/break/brace, stop looking
+      if (indent < writeIndent && trimmed !== '' && trimmed !== '{' && trimmed !== '}' &&
+          !/^(case\s|default\s*:|break\b)/.test(trimmed)) {
+        break;
+      }
+    }
+
+    if (!switchFound) {
+      return false;
+    }
+
+    // Check if there's a case or default keyword between the two writes
+    for (let i = writeLine + 1; i < nextWriteLine; i++) {
+      const line = lines[i] || '';
+      if (/^\s*(case\s+|default\s*:)/.test(line)) {
+        return true;
       }
     }
 

@@ -99,7 +99,7 @@ export class StaticAnalyzer {
     }
 
     if (this.config.checkUnusedVariables) {
-      diagnostics.push(...this.checkUnusedVariables(uri));
+      diagnostics.push(...this.checkUnusedVariables(uri, text));
     }
 
     if (this.config.checkDuplicateThreads) {
@@ -316,16 +316,57 @@ export class StaticAnalyzer {
   /**
    * Check for unused variables
    */
-  private checkUnusedVariables(uri: string): Diagnostic[] {
+  private checkUnusedVariables(uri: string, text: string): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const symbols = this.symbolIndex.getDocumentSymbols(uri);
+
+    // Get comment ranges to filter out references inside comments
+    const commentRanges = this.getCommentRanges(text);
+
+    // Build a set of variables that are used via 'end local.varname' (counts as a read)
+    const endReadVars = new Set<string>();
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Match: end local.varname, end level.varname, etc.
+      const endMatches = line.matchAll(/\bend\s+((?:local|level|game|group)\.\w[\w@#'-]*)/gi);
+      for (const match of endMatches) {
+        // Skip if inside a comment
+        if (this.isInComment(commentRanges, i, match.index!)) {
+          continue;
+        }
+        endReadVars.add(match[1].toLowerCase());
+      }
+    }
 
     for (const symbol of symbols) {
       if (symbol.kind !== 13) continue; // Variable
 
+      // Skip symbols whose definition is inside a comment
+      if (this.isInComment(commentRanges, symbol.selectionRange.start.line, symbol.selectionRange.start.character)) {
+        continue;
+      }
+
+      // Skip variables that are read via 'end local.varname'
+      if (endReadVars.has(symbol.name.toLowerCase())) {
+        continue;
+      }
+
       const refs = this.symbolIndex.findReferences(symbol.name, true);
-      const nonDefinitionRefs = refs.filter(r => r.context !== 'assignment');
-      
+
+      // Filter out references that are inside comments (false positive assignments/reads)
+      const validRefs = refs.filter(r => !this.isInComment(commentRanges, r.range.start.line, r.range.start.character));
+
+      // Check if there are any non-assignment references among valid refs
+      const nonDefinitionRefs = validRefs.filter(r => r.context !== 'assignment');
+      // Also check if all assignments are in comments (meaning the variable definition itself is from a comment)
+      const validAssignments = validRefs.filter(r => r.context === 'assignment');
+
+      if (validAssignments.length === 0) {
+        // All assignments were in comments; skip this variable entirely
+        continue;
+      }
+
       if (nonDefinitionRefs.length === 0) {
         diagnostics.push({
           severity: DiagnosticSeverity.Hint,
@@ -485,12 +526,85 @@ export class StaticAnalyzer {
   }
 
   /**
+   * Build a map of string literal ranges per line (similar to comment ranges)
+   */
+  private getStringRanges(text: string): Map<number, Array<[number, number]>> {
+    const ranges = new Map<number, Array<[number, number]>>();
+    const lines = text.split('\n');
+
+    const addRange = (line: number, start: number, end: number) => {
+      const lineRanges = ranges.get(line) ?? [];
+      lineRanges.push([start, end]);
+      ranges.set(line, lineRanges);
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      let j = 0;
+
+      while (j < line.length) {
+        const ch = line[j];
+
+        // Skip comment regions
+        if (ch === '/' && line[j + 1] === '/') {
+          break; // Rest of line is comment
+        }
+        if (ch === '/' && line[j + 1] === '*') {
+          // Skip block comment until closing
+          const endIdx = line.indexOf('*/', j + 2);
+          if (endIdx === -1) break;
+          j = endIdx + 2;
+          continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+          const quote = ch;
+          const start = j;
+          j++;
+          while (j < line.length) {
+            if (line[j] === '\\') {
+              j += 2;
+              continue;
+            }
+            if (line[j] === quote) {
+              j++;
+              break;
+            }
+            j++;
+          }
+          addRange(i, start, j);
+          continue;
+        }
+
+        j++;
+      }
+    }
+
+    return ranges;
+  }
+
+  /**
+   * Check if a position is inside a string literal
+   */
+  private isInString(
+    stringRanges: Map<number, Array<[number, number]>>,
+    line: number,
+    index: number
+  ): boolean {
+    const ranges = stringRanges.get(line);
+    if (!ranges) return false;
+
+    return ranges.some(([start, end]) => index >= start && index < end);
+  }
+
+  /**
    * Check for unknown function calls
    */
   private checkUnknownFunctions(text: string, uri: string, document: TextDocument): Diagnostic[] {
     const diagnostics: Diagnostic[] = [];
     const lines = text.split('\n');
     const commentRanges = this.getCommentRanges(text);
+    const stringRanges = this.getStringRanges(text);
 
     // Known keywords and built-ins to ignore
     const ignored = new Set([
@@ -502,17 +616,23 @@ export class StaticAnalyzer {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      
+
       // Match potential function calls: identifier followed by (
       // But not preceded by thread/waitthread/exec (those are thread calls)
       // Also exclude property access (preceded by .) like local.player(...)
-      const funcCallMatches = line.matchAll(/(?<!thread\s+)(?<!waitthread\s+)(?<!exec\s+)(?<!\.)(?<!\$)\b([a-zA-Z_]\w*)\s*\(/g);
-      
+      // Also exclude cross-file thread calls preceded by :: like path.scr::ThreadName(
+      const funcCallMatches = line.matchAll(/(?<!thread\s+)(?<!waitthread\s+)(?<!exec\s+)(?<!\.)(?<!\$)(?<!::)\b([a-zA-Z_]\w*)\s*\(/g);
+
       for (const match of funcCallMatches) {
         const funcName = match[1];
         const startChar = match.index!;
 
         if (this.isInComment(commentRanges, i, startChar)) {
+          continue;
+        }
+
+        // Skip if inside a string literal
+        if (this.isInString(stringRanges, i, startChar)) {
           continue;
         }
 
@@ -554,11 +674,12 @@ export class StaticAnalyzer {
 
     let unreachableStart: number | null = null;
     let inThread = false;
+    let braceDepth = 0;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trimStart();
-      
+
       // Check for thread start (resets unreachable state)
       const isAtColumnZero = line.length > 0 && line[0] !== ' ' && line[0] !== '\t';
       if (isAtColumnZero && /^\w[\w@#'-]*\s*:/.test(line)) {
@@ -567,16 +688,29 @@ export class StaticAnalyzer {
         }
         unreachableStart = null;
         inThread = true;
+        braceDepth = 0;
         continue;
       }
 
-      // Check for end
-      if (/^\s*end\b/.test(trimmed)) {
+      // Save brace depth before processing this line's braces
+      // (used to check if end/goto/break is inside a block on this line)
+      const braceDepthBeforeLine = braceDepth;
+
+      // Track brace depth for conditional block detection
+      // Count opening and closing braces on this line (outside strings/comments)
+      for (const ch of trimmed) {
+        if (ch === '{') braceDepth++;
+        else if (ch === '}') braceDepth = Math.max(0, braceDepth - 1);
+      }
+
+      // Check for end at thread level (bare end, not end local.var)
+      if (/^\s*end\s*$/.test(line)) {
         if (unreachableStart !== null && unreachableStart < i) {
           this.addUnreachableDiagnostic(diagnostics, unreachableStart, i - 1, lines);
         }
         unreachableStart = null;
         inThread = false;
+        braceDepth = 0;
         continue;
       }
 
@@ -590,10 +724,29 @@ export class StaticAnalyzer {
       }
 
       // Check for return/break/continue/goto (start of unreachable section)
+      // Only flag as unreachable if at the top level of the thread (braceDepth == 0),
+      // meaning it's NOT inside a conditional block (if/else/while/for).
       if (inThread && /^\s*(end|break|continue|goto\s+\w+)\b/.test(trimmed)) {
-        // Skip if line is just 'end' (handled above)
-        if (!/^\s*end\s*$/.test(trimmed)) {
-          unreachableStart = i + 1;
+        // Skip if line is just 'end' (handled above) or 'end <value>' (return with value, not a terminator)
+        if (!/^\s*end\s*$/.test(trimmed) && !/^\s*end\s+\S/.test(trimmed)) {
+          // Only mark as unreachable if at top-level scope (not inside a conditional block)
+          // Use braceDepthBeforeLine to handle 'end}' on same line (still inside block)
+          // Also check for braceless conditionals: if the previous non-empty line is
+          // an if/else/while/for without '{', we're inside a conditional body
+          if (braceDepthBeforeLine === 0 && braceDepth === 0) {
+            let insideBracelessConditional = false;
+            for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+              const prevTrimmed = lines[j].trimStart();
+              if (prevTrimmed === '' || prevTrimmed.startsWith('//')) continue;
+              if (/^(if\s*\(|else\s*if\s*\(|else\b|while\s*\(|for\s*\()/.test(prevTrimmed) && !prevTrimmed.includes('{')) {
+                insideBracelessConditional = true;
+              }
+              break;
+            }
+            if (!insideBracelessConditional) {
+              unreachableStart = i + 1;
+            }
+          }
         }
         continue;
       }
