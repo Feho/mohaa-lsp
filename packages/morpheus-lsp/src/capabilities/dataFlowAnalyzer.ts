@@ -114,17 +114,72 @@ export class DataFlowAnalyzer {
   /**
    * Parse threads from lines
    */
+  /**
+   * Strip comments from a line (both // and inline portions of block comments)
+   */
+  private stripLineComment(line: string): string {
+    // Remove // comments (but not inside strings)
+    let inString = false;
+    let stringChar = '';
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (inString) {
+        if (ch === stringChar) inString = false;
+      } else {
+        if (ch === '"' || ch === "'") {
+          inString = true;
+          stringChar = ch;
+        } else if (ch === '/' && i + 1 < line.length && line[i + 1] === '/') {
+          return line.substring(0, i);
+        }
+      }
+    }
+    return line;
+  }
+
+  /**
+   * Build a set of line numbers that are inside block comments
+   */
+  private buildBlockCommentLines(lines: string[]): Set<number> {
+    const commentLines = new Set<number>();
+    let inBlock = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (inBlock) {
+        commentLines.add(i);
+        if (line.includes('*/')) {
+          inBlock = false;
+        }
+      } else if (line.includes('/*')) {
+        commentLines.add(i);
+        if (!line.includes('*/')) {
+          inBlock = true;
+        }
+      }
+    }
+    return commentLines;
+  }
+
   private parseThreads(lines: string[]): ThreadAnalysis[] {
     const threads: ThreadAnalysis[] = [];
     let currentThread: ThreadAnalysis | null = null;
+    const blockCommentLines = this.buildBlockCommentLines(lines);
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
+      // Skip lines inside block comments
+      if (blockCommentLines.has(i)) {
+        continue;
+      }
+
+      // Strip line comments before processing
+      const cleanLine = this.stripLineComment(line);
+
       // Thread definition
       // Morpheus Script thread params are space-separated: threadname local.p1 local.p2:
-      const threadMatch = line.match(/^(\w[\w@#'-]*)\s+((?:(?:local|group)\.\w+\s*)*):/) ||
-                           line.match(/^(\w[\w@#'-]*)\s*(?:\(([^)]*)\))?\s*:/);
+      const threadMatch = cleanLine.match(/^(\w[\w@#'-]*)\s+((?:(?:local|group)\.\w+\s*)*):/) ||
+                           cleanLine.match(/^(\w[\w@#'-]*)\s*(?:\(([^)]*)\))?\s*:/);
       if (threadMatch) {
         if (currentThread) {
           currentThread.endLine = i - 1;
@@ -191,8 +246,29 @@ export class DataFlowAnalyzer {
         continue;
       }
 
-      // End of thread
-      if (/^\s*end\b/.test(line) && currentThread) {
+      // End of thread — only when 'end' is at column 0 (no leading whitespace).
+      // Indented 'end' statements are early returns inside control flow blocks.
+      if (/^end\b/.test(cleanLine) && currentThread) {
+        // Parse variables in 'end <expr>' as reads before closing the thread
+        const endExprMatch = cleanLine.match(/^\s*end\s+(.+)/);
+        if (endExprMatch) {
+          const endExpr = endExprMatch[1];
+          const endReadPattern = /(local|group|level|game)\.(\w+)/g;
+          let endReadMatch;
+          while ((endReadMatch = endReadPattern.exec(endExpr)) !== null) {
+            const [, scope, varName] = endReadMatch;
+            const varKey = scope === 'local' ? varName : `${scope}.${varName}`;
+            // Find position in original line
+            const exprStart = line.indexOf(endExpr);
+            const varPos = exprStart + endReadMatch.index;
+            if (currentThread.variables.has(varKey)) {
+              currentThread.variables.get(varKey)!.reads.push({
+                start: { line: i, character: varPos + scope.length + 1 },
+                end: { line: i, character: varPos + scope.length + 1 + varName.length },
+              });
+            }
+          }
+        }
         currentThread.endLine = i;
         threads.push(currentThread);
         currentThread = null;
@@ -203,7 +279,7 @@ export class DataFlowAnalyzer {
 
       // Variable assignment (including array subscript like local.arr[idx] = val)
       // Use =(?!=) to avoid matching == (comparison) as assignment
-      const assignMatch = line.match(/(local|group|level|game)\.(\w+)(?:\[.*?\])?\s*=(?!=)\s*(.+)/);
+      const assignMatch = cleanLine.match(/(local|group|level|game)\.(\w+)(?:\[.*?\])?\s*=(?!=)\s*(.+)/);
       if (assignMatch) {
         const [, scope, varName, valueExpr] = assignMatch;
         const varKey = scope === 'local' ? varName : `${scope}.${varName}`;
@@ -236,12 +312,12 @@ export class DataFlowAnalyzer {
         }
       }
 
-      // Variable reads
+      // Variable reads (also handles indented 'end local.var' as reads naturally)
       const readPattern = /(local|group|level|game)\.(\w+)/g;
       let readMatch;
-      while ((readMatch = readPattern.exec(line)) !== null) {
+      while ((readMatch = readPattern.exec(cleanLine)) !== null) {
         // Skip if this is the left side of an assignment (including array subscript, ++, --)
-        const afterMatch = line.substring(readMatch.index + readMatch[0].length);
+        const afterMatch = cleanLine.substring(readMatch.index + readMatch[0].length);
         if (/^\s*=(?!=)/.test(afterMatch) ||
             /^\s*\[.*?\]\s*=(?!=)/.test(afterMatch) ||
             /^\s*(\+\+|--)/.test(afterMatch)) {
@@ -314,8 +390,15 @@ export class DataFlowAnalyzer {
       if (this.config.detectUninitializedAccess) {
         if (varInfo.definitionLine === -1 && varInfo.scope === 'local' && !varInfo.isParameter) {
           for (const read of varInfo.reads) {
-            const hasWriteBefore = varInfo.writes.some(w => 
-              w.start.line < read.start.line || 
+            // Skip array subscript access — accessing an uninitialized var via subscript
+            // (e.g., local.words[idx]) is a common Morpheus Script pattern that returns NIL
+            const readLineText = lines[read.start.line] || '';
+            if (new RegExp(`local\\.${varInfo.name}\\s*\\[`).test(readLineText)) {
+              continue;
+            }
+
+            const hasWriteBefore = varInfo.writes.some(w =>
+              w.start.line < read.start.line ||
               (w.start.line === read.start.line && w.start.character < read.start.character)
             );
 

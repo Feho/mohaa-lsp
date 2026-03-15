@@ -853,13 +853,47 @@ async function validateDocument(document: TextDocument, trigger: 'onSave' | 'onC
     // Only flag == when it appears to be the main assignment operator (not inside an expression RHS)
     const assignmentMatch = lineWithoutComments.match(/\b\w+\s*==\s*\w+/);
     if (assignmentMatch && !lineWithoutComments.match(/if|while|for|end\b/)) {
+      // Check if this line is a continuation of a multi-line if/while/for condition
+      // by scanning forward from preceding lines to track unclosed parentheses
+      let isContinuation = false;
+      {
+        let depth = 0;
+        let foundConditional = false;
+        // Scan backwards to find the start of the statement (max 20 lines)
+        const scanStart = Math.max(0, i - 20);
+        for (let j = scanStart; j <= i; j++) {
+          const scanLine = lines[j];
+          if (depth === 0 && /\b(if|while|for)\b/.test(scanLine)) {
+            foundConditional = true;
+          }
+          for (let k = 0; k < scanLine.length; k++) {
+            if (scanLine[k] === '(') depth++;
+            else if (scanLine[k] === ')') depth--;
+          }
+        }
+        // If we're currently inside parens opened by an if/while/for, it's a continuation
+        // (depth > 0 means parens are still open at the end of line i, but that may not apply
+        // since line i may close them — check if depth was > 0 before processing line i)
+        let depthBeforeLine = 0;
+        for (let j = scanStart; j < i; j++) {
+          const scanLine = lines[j];
+          for (let k = 0; k < scanLine.length; k++) {
+            if (scanLine[k] === '(') depthBeforeLine++;
+            else if (scanLine[k] === ')') depthBeforeLine--;
+          }
+        }
+        if (depthBeforeLine > 0 && foundConditional) {
+          isContinuation = true;
+        }
+      }
+
       // Check if the == is actually inside the RHS of a = assignment (e.g., local.x = (a == b))
       const eqIdx = lineWithoutComments.indexOf('==');
       const singleEqMatch = lineWithoutComments.match(/\b\w[\w.]*\s*=\s/);
       const isInsideRHS = singleEqMatch && singleEqMatch.index !== undefined &&
         (singleEqMatch.index + singleEqMatch[0].length - 1) < eqIdx;
 
-      if (!isInsideRHS) {
+      if (!isInsideRHS && !isContinuation) {
         diagnostics.push({
           severity: DiagnosticSeverity.Warning,
           range: {
