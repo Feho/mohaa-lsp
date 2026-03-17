@@ -769,7 +769,7 @@ async function validateDocument(document: TextDocument, trigger: 'onSave' | 'onC
     diagnostics.push(...stringErrors);
 
     // Remove strings from line for bracket checking
-    const lineForBracketCheck = lineWithoutComments.replace(/["'][^"']*["']/g, '""');
+    const lineForBracketCheck = lineWithoutComments.replace(/"[^"]*"|'[^']*'/g, '""');
 
     // Check for thread definition (use comment-stripped line)
     // Thread definitions must start at column 0 (no indentation) - this prevents false positives

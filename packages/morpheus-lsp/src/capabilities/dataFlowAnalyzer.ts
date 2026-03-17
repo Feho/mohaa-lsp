@@ -461,6 +461,14 @@ export class DataFlowAnalyzer {
             (r.start.line === nextWrite.start.line && r.start.character > nextWrite.start.character)
           );
 
+          // Check if there's a read BEFORE the first write (covers loop iterations
+          // where the variable is read at the top of the loop and written at the bottom —
+          // on the next iteration the read sees the value from the previous write)
+          const hasReadBeforeWrite = varInfo.reads.some(r =>
+            r.start.line < write.start.line ||
+            (r.start.line === write.start.line && r.start.character < write.start.character)
+          );
+
           // Check if writes are inside a loop — look for while/for between thread start and write
           const writesInLoop = this.isInsideLoop(lines, write.start.line, thread.startLine) &&
                                this.isInsideLoop(lines, nextWrite.start.line, thread.startLine);
@@ -474,7 +482,7 @@ export class DataFlowAnalyzer {
           // Check if both writes are inside different cases of a switch block
           const writesInSwitch = this.writesInSwitchCases(lines, write.start.line, nextWrite.start.line, thread.startLine);
 
-          if (!hasReadBetween && !(writesInLoop && hasReadAfterNextWrite) && !writesInBranches && !writesInSwitch) {
+          if (!hasReadBetween && !(writesInLoop && (hasReadAfterNextWrite || hasReadBeforeWrite)) && !writesInBranches && !writesInSwitch) {
             diagnostics.push({
               severity: DiagnosticSeverity.Hint,
               range: write,
@@ -616,7 +624,7 @@ export class DataFlowAnalyzer {
     let switchFound = false;
     for (let i = writeLine - 1; i >= threadStart; i--) {
       const line = lines[i] || '';
-      const trimmed = line.trimStart();
+      const trimmed = line.trimStart().replace(/\r$/, '');
       const indent = this.getIndentLevel(line);
 
       if (/^switch\s*[\s(]/.test(trimmed) && indent < writeIndent) {

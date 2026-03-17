@@ -352,6 +352,13 @@ export class StaticAnalyzer {
         continue;
       }
 
+      // Skip level/game/group scope variables — the game engine reads them directly
+      // and they are shared across threads/files, so single-file analysis can't determine usage
+      const scopeMatch = symbol.name.match(/^(level|game|group)\./i);
+      if (scopeMatch) {
+        continue;
+      }
+
       const refs = this.symbolIndex.findReferences(symbol.name, true);
 
       // Filter out references that are inside comments (false positive assignments/reads)
